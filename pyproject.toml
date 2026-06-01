@@ -1,0 +1,71 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bladerecon"
+version = "0.2.0"
+description = "BladeRecon - Fast, lightweight reconnaissance framework for attack surface discovery, bug bounty hunting, and web security assessments."
+readme = "README.md"
+requires-python = ">=3.8"
+license = "MIT"
+
+authors = [
+  { name = "Mohamed Kotb", email = "ma7660@fayoum.edu.eg" }
+]
+
+keywords = [
+  "bugbounty",
+  "recon",
+  "pentest",
+  "security",
+  "nuclei"
+]
+
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Environment :: Console",
+  "Intended Audience :: Information Technology",
+  "Intended Audience :: Developers",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.8",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Security",
+  "Topic :: Internet :: WWW/HTTP",
+  "Topic :: System :: Networking",
+  "Topic :: Utilities",
+]
+
+dependencies = [
+  "typer>=0.9.0",
+  "rich>=13.0.0",
+  "httpx[http2]>=0.24.0",
+  "PyYAML>=6.0",
+  "Jinja2>=3.1.0",
+  "playwright>=1.35.0",
+  "beautifulsoup4>=4.12.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/mohamedxk9tb/BladeRecon"
+Repository = "https://github.com/mohamedxk9tb/BladeRecon"
+Issues = "https://github.com/mohamedxk9tb/BladeRecon/issues"
+Changelog = "https://github.com/mohamedxk9tb/BladeRecon/blob/main/CHANGELOG.md"
+
+[project.scripts]
+bladerecon = "bladerecon.main:app"
+
+[tool.setuptools.package-data]
+bladerecon = [
+  "templates/*.j2",
+  "wordlists/*.txt",
+  "assets/*.png"
+]
+
+[tool.setuptools.packages.find]
+include = ["bladerecon", "bladerecon.*"]

@@ -1,0 +1,248 @@
+# BladeRecon configuration template
+# Copy this file to `config.yaml` and edit values as needed.
+
+# API keys (optional). Legacy top-level keys are still supported.
+# You can also set environment variables with prefix BLADERECON_
+# Example: export BLADERECON_ALIENVAULT_API_KEY=yourkey
+alienvault_api_key: ""
+chaos_api_key: ""
+
+api_keys:
+  alienvault: ""
+  chaos: ""
+
+# Output defaults
+output_dir: "results"
+scan_profile: "balanced"
+
+# Passive source toggles
+sources:
+  crtsh: true
+  alienvault: true
+  chaos: true
+  bufferover: true
+  urlscan: true
+  rapiddns: true
+  anubis: false
+  hackertarget: true
+
+# DNS brute prefixes (used for active mode)
+dns_brute_prefixes:
+  - www
+  - web
+  - dev
+  - test
+  - staging
+  - mail
+  - admin
+  - ftp
+  - api
+  - vpn
+
+# Concurrency and rate limits
+concurrency:
+  probe: 50
+  js: 10
+  screenshots: 4
+  nuclei: 25
+  dns: 50
+
+rate_limits:
+  probe: 12
+  js: 6
+  screenshots: 1
+  nuclei: 25
+
+request_ceilings:
+  probe: 500
+  js_html: 40
+  js_downloads: 150
+  screenshots: 25
+  nuclei_targets: 250
+  historical_urls: 1000
+  content_discovery: 80
+  security_header_hosts: 20
+  historical_js: 40
+
+per_host_concurrency:
+  probe: 2
+  js: 2
+  screenshots: 1
+
+backoff:
+  base_delay: 0.5
+  max_delay: 8
+  status_codes:
+    - 429
+    - 500
+    - 502
+    - 503
+    - 504
+
+safety_profiles:
+  safe:
+    concurrency:
+      probe: 8
+      js: 3
+      screenshots: 1
+      nuclei: 8
+      dns: 20
+    rate_limits:
+      probe: 4
+      js: 2
+      screenshots: 0.5
+      nuclei: 8
+    request_ceilings:
+      probe: 120
+      js_html: 20
+      js_downloads: 60
+      screenshots: 10
+      nuclei_targets: 80
+      historical_urls: 300
+      content_discovery: 30
+      security_header_hosts: 8
+      historical_js: 12
+    per_host_concurrency:
+      probe: 1
+      js: 1
+      screenshots: 1
+  balanced:
+    concurrency:
+      probe: 50
+      js: 10
+      screenshots: 4
+      nuclei: 25
+      dns: 50
+    rate_limits:
+      probe: 12
+      js: 6
+      screenshots: 1
+      nuclei: 25
+    request_ceilings:
+      probe: 500
+      js_html: 40
+      js_downloads: 150
+      screenshots: 25
+      nuclei_targets: 250
+      historical_urls: 1000
+      content_discovery: 80
+      security_header_hosts: 20
+      historical_js: 40
+    per_host_concurrency:
+      probe: 2
+      js: 2
+      screenshots: 1
+  aggressive:
+    concurrency:
+      probe: 100
+      js: 20
+      screenshots: 8
+      nuclei: 50
+      dns: 80
+    rate_limits:
+      probe: 30
+      js: 15
+      screenshots: 3
+      nuclei: 50
+    request_ceilings:
+      probe: 1500
+      js_html: 100
+      js_downloads: 400
+      screenshots: 75
+      nuclei_targets: 750
+      historical_urls: 3000
+      content_discovery: 180
+      security_header_hosts: 50
+      historical_js: 100
+    per_host_concurrency:
+      probe: 4
+      js: 3
+      screenshots: 2
+
+retries:
+  http: 1
+  sources: 2
+  screenshots: 1
+
+dns_concurrency: 50
+
+# Lightweight fallback DNS expansion.
+# Runs only when passive results are below the threshold.
+wordlist_expansion:
+  enabled: true
+  threshold: 30
+  concurrency: 30
+  timeout: 3
+  retries: 1
+
+# Module timeouts in seconds
+timeouts:
+  http: 10
+  nuclei: 300
+  screenshot: 45
+  source: 30
+
+probe:
+  browser_fallback_enabled: true
+  max_browser_fallbacks: 10
+
+js:
+  max_html_pages: 40
+
+nuclei_profiles:
+  safe:
+    severity: "critical,high,medium"
+    exclude_tags: "dos,bruteforce,intrusive,fuzz"
+    rate_limit: 10
+  balanced:
+    severity: "critical,high,medium,low"
+    exclude_tags: "dos,bruteforce,intrusive"
+    rate_limit: 25
+  aggressive:
+    severity: "critical,high,medium,low,info"
+    exclude_tags: ""
+    rate_limit: 50
+
+nuclei:
+  automatic_scan: true
+  request_timeout: 8
+  retries: 0
+  module_timeout: 0
+  enforce_module_timeout: false
+  progress_interval: 10
+
+opsec:
+  proxy: ""
+  http_proxy: ""
+  https_proxy: ""
+  socks5_proxy: ""
+  user_agent: ""
+  random_user_agent: false
+
+screenshots:
+  browser_fallback_enabled: true
+  max_browser_probes: 25
+  skip_duplicate_titles: true
+  skip_duplicate_content_lengths: true
+  placeholder_titles:
+    - parking
+    - coming soon
+    - default page
+    - welcome to nginx
+    - it works
+
+advanced:
+  historical:
+    max_urls: 1000
+    sources:
+      wayback: true
+      commoncrawl: true
+      alienvault: true
+  content_discovery:
+    max_hosts: 8
+    max_requests: 80
+    words: []
+  security_headers:
+    max_hosts: 20
+  historical_js:
+    max_files: 40

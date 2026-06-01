@@ -1,0 +1,255 @@
+# =========================================
+
+# Core / Common
+
+# =========================================
+
+www
+api
+app
+portal
+dashboard
+panel
+console
+status
+help
+support
+docs
+blog
+search
+
+# =========================================
+
+# Authentication / Identity
+
+# =========================================
+
+login
+auth
+secure
+sso
+oauth
+identity
+iam
+ldap
+saml
+auth-api
+accounts
+users
+
+# =========================================
+
+# Development / Testing
+
+# =========================================
+
+dev
+developer
+developers
+devops
+test
+testing
+staging
+stage
+beta
+qa
+uat
+demo
+sandbox
+old
+new
+preview
+api-dev
+api-stage
+api-test
+
+# =========================================
+
+# Production / Internal
+
+# =========================================
+
+prod
+production
+internal
+internal-api
+intranet
+gateway
+gateway-api
+proxy
+edge
+private
+private-api
+secure-api
+
+# =========================================
+
+# API / Backend
+
+# =========================================
+
+api-v1
+api-v2
+api-v3
+graphql
+graphql-api
+admin-api
+public-api
+rest
+backend
+services
+microservices
+
+# =========================================
+
+# Infrastructure / Network
+
+# =========================================
+
+vpn
+ftp
+smtp
+imap
+mx
+ns1
+ns2
+cdn
+static
+assets
+network
+router
+
+# =========================================
+
+# Storage / Files
+
+# =========================================
+
+files
+download
+uploads
+media
+images
+img
+storage
+archive
+backup
+backups
+registry
+artifacts
+
+# =========================================
+
+# Databases / Cache
+
+# =========================================
+
+db
+db-v2
+database
+mysql
+postgres
+postgresql
+mongo
+mongodb
+redis
+cache
+memcached
+
+# =========================================
+
+# DevOps / Monitoring
+
+# =========================================
+
+jira
+jenkins
+grafana
+gitlab
+git
+ci
+monitor
+monitoring
+metrics
+prometheus
+kibana
+elk
+docker
+k8s
+kubernetes
+argo
+
+# =========================================
+
+# Business / SaaS
+
+# =========================================
+
+billing
+payments
+checkout
+stats
+analytics
+shop
+store
+crm
+erp
+
+# =========================================
+
+# Admin / Sensitive
+
+# =========================================
+
+admin
+admin-panel
+cpanel
+control
+manager
+management
+vault
+secrets
+secret
+config
+
+# =========================================
+
+# Mobile
+
+# =========================================
+
+mobile
+m
+android
+ios
+
+# =========================================
+
+# Mail
+
+# =========================================
+
+mail
+webmail
+mail-api
+
+# =========================================
+
+# Interesting Modern Targets
+
+# =========================================
+
+swagger
+openapi
+developer-api
+api-dashboard
+dashboard-api
+health
+healthcheck
+status-api
+webhook
+webhooks
+socket
+ws
+cdn-api
+edge-api

@@ -1,0 +1,213 @@
+# =========================
+# Authentication / Tokens
+# =========================
+
+token
+access_token
+auth
+auth_token
+authorization
+bearer
+jwt
+session
+sessionid
+api_key
+apikey
+client_id
+client_secret
+secret
+password
+passwd
+otp
+mfa
+csrf
+csrf_token
+xsrf
+XSRF-TOKEN
+
+# =========================
+# Redirects / Navigation
+# =========================
+
+redirect
+redirect_url
+redirect_uri
+redirect_to
+return
+returnTo
+return_url
+next
+continue
+callback
+callback_url
+dest
+destination
+target
+goto
+forward
+url
+
+# =========================
+# User / Account
+# =========================
+
+id
+uid
+pid
+user
+userid
+username
+email
+mail
+profile
+account
+admin
+role
+permission
+access
+member
+
+# =========================
+# Search / Query
+# =========================
+
+q
+query
+search
+keyword
+filter
+sort
+order
+category
+tag
+tags
+type
+status
+
+# =========================
+# Pagination
+# =========================
+
+page
+page_size
+per_page
+limit
+offset
+count
+max
+min
+from
+to
+start
+end
+
+# =========================
+# Files / Uploads
+# =========================
+
+file
+filename
+filepath
+file_path
+upload
+download
+image
+avatar
+document
+attachment
+path
+dir
+directory
+
+# =========================
+# API / Backend
+# =========================
+
+api
+version
+v
+module
+plugin
+method
+action
+format
+output
+view
+template
+layout
+content
+
+# =========================
+# Debug / Internal
+# =========================
+
+debug
+debug_mode
+test
+testing
+dev
+staging
+internal
+private
+config
+env
+mode
+state
+
+# =========================
+# Messaging / Text
+# =========================
+
+msg
+message
+text
+comment
+title
+subject
+body
+data
+payload
+input
+value
+
+# =========================
+# Network / Infrastructure
+# =========================
+
+host
+port
+domain
+site
+scheme
+protocol
+src
+source
+ref
+link
+href
+
+# =========================
+# OAuth / SSO
+# =========================
+
+oauth
+oauth_token
+code
+state
+scope
+response_type
+grant_type
+
+# =========================
+# Verification / Recovery
+# =========================
+
+verify
+verification
+confirm
+confirmation
+reset
+reset_token
+activation
+invite
+magic_link

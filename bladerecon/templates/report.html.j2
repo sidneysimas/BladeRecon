@@ -1,0 +1,1060 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>BladeRecon Report - {{ target }}</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%230f172a'/%3E%3Cpath d='M18 48 45 15l-7 27-20 6Z' fill='%2306b6d4'/%3E%3C/svg%3E">
+    <style>
+      :root {
+        --bg: #090d14;
+        --panel: #111827;
+        --panel-2: #0f172a;
+        --border: #253044;
+        --accent: #22d3ee;
+        --accent-2: #38bdf8;
+        --success: #22c55e;
+        --warning: #f59e0b;
+        --critical: #f87171;
+        --high: #fb923c;
+        --medium: #facc15;
+        --low: #4ade80;
+        --info: #38bdf8;
+        --text: #e5edf7;
+        --muted: #94a3b8;
+        --shadow: 0 18px 40px rgba(0, 0, 0, .35);
+        --radius: 8px;
+      }
+      * { box-sizing: border-box; }
+      html { scroll-behavior: smooth; }
+      body {
+        margin: 0;
+        background: radial-gradient(circle at top left, rgba(34, 211, 238, .10), transparent 28rem), linear-gradient(180deg, #0b1220 0%, var(--bg) 24rem);
+        color: var(--text);
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        line-height: 1.5;
+      }
+      a { color: inherit; }
+      code { color: #7dd3fc; font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; overflow-wrap: anywhere; }
+      .layout { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 22px; width: min(1460px, calc(100% - 40px)); margin: 0 auto; padding: 28px 0 36px; }
+      .sidebar { position: sticky; top: 18px; align-self: start; padding: 16px; border: 1px solid var(--border); border-radius: var(--radius); background: rgba(17,24,39,.92); box-shadow: 0 12px 28px rgba(0,0,0,.28); }
+      .side-brand { color: var(--accent); font-weight: 850; margin-bottom: 14px; }
+      .nav { display: grid; gap: 6px; }
+      .nav a { text-decoration: none; color: var(--muted); padding: 8px 10px; border-radius: 10px; display: flex; align-items: center; gap: 8px; border: 1px solid transparent; }
+      .nav a:hover, .nav a.active { color: var(--text); background: rgba(15,118,110,.08); border-color: rgba(15,118,110,.22); }
+      .nav-icon { width: 1.15rem; text-align: center; color: var(--accent); }
+      .main { min-width: 0; }
+      .hero {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 24px;
+        align-items: stretch;
+        padding: 28px;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: linear-gradient(135deg, #111827, #0f172a);
+        box-shadow: var(--shadow);
+      }
+      .brand { display: flex; align-items: center; gap: 12px; color: var(--accent); font-weight: 800; letter-spacing: .02em; }
+      .logo { width: 42px; height: 42px; display: grid; place-items: center; border: 1px solid rgba(34,211,238,.32); border-radius: 10px; background: rgba(34,211,238,.10); font-size: 1.35rem; }
+      .hero h1 { margin: 16px 0 8px; font-size: clamp(2rem, 4vw, 3.5rem); line-height: 1.02; letter-spacing: 0; }
+      .hero p { margin: 0; color: var(--muted); font-size: 1.02rem; }
+      .hero-meta { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+      .hero-pill { border: 1px solid var(--border); border-radius: 999px; background: var(--panel); color: var(--muted); padding: 7px 10px; font-size: .82rem; font-weight: 700; }
+      .hero-pill strong { color: var(--text); }
+      .risk-panel { min-width: 310px; display: grid; gap: 12px; align-content: start; padding: 18px; border: 1px solid rgba(34,211,238,.22); border-radius: 10px; background: #0b1220; color: #f8fafc; }
+      .risk-panel .label, .risk-panel .muted { color: #cbd5e1; }
+      .risk-score { display: flex; align-items: end; justify-content: space-between; gap: 16px; }
+      .risk-score strong { font-size: 3.2rem; line-height: .9; letter-spacing: 0; }
+      .risk-level { border-radius: 999px; padding: 6px 10px; font-size: .8rem; font-weight: 800; background: rgba(255,255,255,.12); color: #fff; }
+      .risk-panel-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+      .risk-mini { padding: 10px; border: 1px solid rgba(255,255,255,.14); border-radius: 8px; background: rgba(255,255,255,.06); }
+      .risk-mini .value { color: #fff; }
+      .meta-grid { display: grid; grid-template-columns: repeat(2, minmax(130px, 1fr)); gap: 10px; min-width: 320px; }
+      .meta-card, .card, .data-panel {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        box-shadow: 0 10px 24px rgba(0, 0, 0, .22);
+      }
+      .meta-card { padding: 14px; }
+      .label { color: var(--muted); font-size: .78rem; text-transform: uppercase; letter-spacing: .08em; }
+      .value { margin-top: 4px; font-weight: 700; word-break: break-word; }
+      .toolbar { display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; align-items: center; margin: 22px 0; }
+      .actions { display: flex; flex-wrap: wrap; gap: 10px; }
+      .btn {
+        border: 1px solid rgba(34,211,238,.30);
+        background: rgba(34,211,238,.10);
+        color: var(--text);
+        border-radius: 8px;
+        padding: 10px 12px;
+        font-weight: 700;
+        text-decoration: none;
+        cursor: pointer;
+      }
+      .btn:hover { border-color: var(--accent); transform: translateY(-1px); }
+      .grid { display: grid; gap: 16px; }
+      .kpis { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); align-items: stretch; }
+      .surface { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+      .card { padding: 18px; transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease; }
+      .kpi-card { min-height: 118px; display: flex; flex-direction: column; justify-content: space-between; }
+      .card:hover { transform: translateY(-2px); border-color: rgba(15,118,110,.28); box-shadow: var(--shadow); }
+      .metric-icon { color: var(--accent); font-size: 1.25rem; }
+      .metric-number { display: block; margin-top: 10px; font-size: 2rem; line-height: 1; font-weight: 850; letter-spacing: -.03em; overflow-wrap: anywhere; }
+      .status-number { font-size: 1.15rem; letter-spacing: 0; }
+      .metric-label { color: var(--muted); font-size: .9rem; }
+      .metric-note { color: var(--muted); font-size: .72rem; margin-top: 6px; min-height: 1em; }
+      .section { margin-top: 22px; scroll-margin-top: 18px; }
+      .section-head { display: flex; justify-content: space-between; align-items: end; gap: 12px; margin-bottom: 12px; }
+      h2 { margin: 0; font-size: 1.15rem; }
+      small, .muted { color: var(--muted); }
+      .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+      .chip, .badge {
+        display: inline-flex; align-items: center; gap: 6px;
+        border-radius: 999px; padding: 5px 9px;
+        border: 1px solid rgba(148, 163, 184, .2);
+        background: rgba(15,23,42,.86);
+        color: var(--text);
+        font-size: .78rem; font-weight: 700;
+      }
+      .badge.alive, .badge.low { color: var(--low); border-color: rgba(34, 197, 94, .28); background: rgba(34, 197, 94, .09); }
+      .badge.passive, .badge.info { color: var(--info); border-color: rgba(56, 189, 248, .28); background: rgba(56, 189, 248, .09); }
+      .badge.critical { color: var(--critical); border-color: rgba(239, 68, 68, .32); background: rgba(239, 68, 68, .1); }
+      .badge.high { color: var(--high); border-color: rgba(249, 115, 22, .32); background: rgba(249, 115, 22, .1); }
+      .badge.medium { color: var(--medium); border-color: rgba(234, 179, 8, .32); background: rgba(234, 179, 8, .1); }
+      .summary-card ul { margin: 12px 0 0; padding-left: 20px; color: var(--muted); }
+      .summary-card li { margin: 5px 0; }
+      .summary-card strong { color: var(--text); }
+      .executive-card { border-top: 3px solid var(--accent); }
+      .executive-label { color: var(--muted); font-size: .76rem; text-transform: uppercase; letter-spacing: .08em; }
+      .severity-chart { display: grid; grid-template-columns: 1fr; gap: 10px; margin-bottom: 14px; }
+      .severity-track { min-height: 18px; display: flex; overflow: hidden; border: 1px solid var(--border); border-radius: 999px; background: #020617; }
+      .severity-segment { min-width: 0; width: 0%; transition: width .3s ease; }
+      .severity-segment.critical { background: var(--critical); }
+      .severity-segment.high { background: var(--high); }
+      .severity-segment.medium { background: var(--medium); }
+      .severity-segment.low { background: var(--low); }
+      .severity-segment.info { background: var(--info); }
+      .severity-legend { display: flex; flex-wrap: wrap; gap: 8px; }
+      .legend-dot { width: .65rem; height: .65rem; border-radius: 999px; display: inline-block; }
+      .finding-list { display: grid; gap: 12px; }
+      .finding-card { border: 1px solid var(--border); border-left: 5px solid var(--info); border-radius: 8px; background: var(--panel); padding: 14px; display: grid; gap: 10px; box-shadow: 0 6px 16px rgba(15,23,42,.05); }
+      .finding-card.critical { border-left-color: var(--critical); }
+      .finding-card.high { border-left-color: var(--high); }
+      .finding-card.medium { border-left-color: var(--medium); }
+      .finding-card.low { border-left-color: var(--low); }
+      .finding-head { display: flex; justify-content: space-between; gap: 12px; align-items: start; }
+      .finding-title { font-weight: 800; font-size: 1rem; }
+      .finding-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+      .finding-evidence { padding: 10px; border-radius: 8px; background: var(--panel-2); border: 1px solid var(--border); }
+      .reference-list { margin: 0; padding-left: 18px; }
+      .ranking-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin-top: 16px; }
+      .ranking-card { border: 1px solid var(--border); border-radius: 8px; background: var(--panel-2); padding: 14px; }
+      .ranking-list { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 8px; }
+      .ranking-list li { display: flex; justify-content: space-between; gap: 10px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+      .ranking-list li:last-child { border-bottom: 0; padding-bottom: 0; }
+      .rank-index { color: var(--muted); font-weight: 800; }
+      .intel-card { padding: 22px; }
+      .intel-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); gap: 12px; margin-top: 14px; }
+      .intel-item { border: 1px solid var(--border); border-radius: 8px; padding: 14px; background: var(--panel-2); }
+      .intel-value { display: block; font-size: 1.55rem; font-weight: 850; line-height: 1.12; overflow-wrap: anywhere; word-break: break-word; }
+      .intel-value.time-value { font-size: 1rem; line-height: 1.25; letter-spacing: 0; }
+      .intel-label { display: block; margin-top: 7px; color: var(--muted); font-size: .82rem; }
+      .intel-note { display: block; margin-top: 5px; color: var(--muted); font-size: .72rem; line-height: 1.25; }
+      .intel-row { margin-top: 14px; display: grid; gap: 10px; }
+      .status-card { border-left: 4px solid var(--warning); }
+      .severity-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+      .severity { position: relative; overflow: hidden; }
+      .severity:before { content: ""; position: absolute; inset: 0 auto 0 0; width: 4px; background: var(--accent); }
+      .severity.critical:before { background: var(--critical); }
+      .severity.high:before { background: var(--high); }
+      .severity.medium:before { background: var(--medium); }
+      .severity.low:before { background: var(--low); }
+      .severity.info:before { background: var(--info); }
+      .data-panel { overflow: hidden; }
+      .data-panel + .data-panel { margin-top: 14px; }
+      .data-panel summary { cursor: pointer; list-style: none; padding: 18px; display: flex; justify-content: space-between; gap: 14px; align-items: center; }
+      .data-panel summary::-webkit-details-marker { display: none; }
+      .summary-title { display: flex; flex-direction: column; gap: 2px; }
+      .summary-title strong { font-size: 1.05rem; }
+      .summary-count { color: var(--accent); font-weight: 800; }
+      .panel-body { border-top: 1px solid var(--border); padding: 16px 18px 18px; }
+      .panel-tools { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+      .search {
+        width: min(420px, 100%);
+        color: var(--text);
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 10px 12px;
+        outline: none;
+      }
+      .search:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(15,118,110,.13); }
+      .category-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+      .table-wrap { overflow: auto; border: 1px solid var(--border); border-radius: 8px; }
+      table { width: 100%; border-collapse: collapse; min-width: 680px; }
+      th, td { padding: 12px 14px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+      th {
+        position: sticky; top: 0; z-index: 1;
+        background: #0f172a;
+        color: var(--muted);
+        font-size: .76rem;
+        text-transform: uppercase;
+        letter-spacing: .08em;
+      }
+      tr:hover td { background: rgba(15,118,110,.045); }
+      tr:last-child td { border-bottom: 0; }
+      .empty { min-height: 120px; display: grid; place-items: center; text-align: center; color: var(--muted); border: 1px dashed rgba(100, 116, 139, .35); border-radius: 8px; background: var(--panel-2); }
+      .shot-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 14px; }
+      .shot-card { overflow: hidden; padding: 0; }
+      .shot-card img { width: 100%; aspect-ratio: 16 / 10; object-fit: cover; display: block; background: #111827; border-bottom: 1px solid var(--border); cursor: zoom-in; }
+      .shot-body { padding: 14px; }
+      .shot-title { color: var(--text); font-weight: 700; font-size: .9rem; overflow-wrap: anywhere; }
+      .failed-shot-list { display: grid; gap: 8px; margin-top: 14px; }
+      .failed-shot { display: flex; justify-content: space-between; gap: 12px; align-items: center; border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; background: rgba(245,158,11,.10); }
+      .lightbox { position: fixed; inset: 0; z-index: 20; display: none; align-items: center; justify-content: center; padding: 24px; background: rgba(15,23,42,.82); }
+      .lightbox.open { display: flex; }
+      .lightbox img { max-width: min(1200px, 96vw); max-height: 86vh; border-radius: 8px; box-shadow: 0 24px 70px rgba(0,0,0,.35); background: #111827; }
+      .lightbox button { position: absolute; top: 16px; right: 16px; }
+      .footer { margin-top: 28px; padding: 20px 0 6px; border-top: 1px solid var(--border); color: var(--muted); display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+      .hidden { display: none !important; }
+      @media (max-width: 1050px) {
+        .layout { grid-template-columns: 1fr; }
+        .sidebar { position: static; }
+        .nav { grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); }
+        .surface, .severity-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .hero { grid-template-columns: 1fr; }
+        .meta-grid, .risk-panel { min-width: 0; }
+      }
+      @media (max-width: 620px) {
+        .layout { width: min(100% - 24px, 1460px); padding-top: 14px; }
+        .hero { padding: 18px; border-radius: 18px; }
+        .kpis, .surface, .severity-grid, .intel-grid { grid-template-columns: 1fr 1fr; }
+        .meta-grid { grid-template-columns: 1fr; }
+        .toolbar, .panel-tools { align-items: stretch; }
+        .actions, .search { width: 100%; }
+        .btn { flex: 1; text-align: center; }
+        .data-panel summary { align-items: flex-start; flex-direction: column; }
+        .hero-meta, .finding-head, .failed-shot { align-items: flex-start; flex-direction: column; }
+        .risk-panel-grid, .finding-grid { grid-template-columns: 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="layout">
+      <aside class="sidebar" aria-label="Report navigation">
+        <div class="side-brand">BladeRecon</div>
+        <nav class="nav">
+          <a href="#overview"><span class="nav-icon">&#8962;</span> Overview</a>
+          <a href="#executive-summary"><span class="nav-icon">&#9632;</span> Summary</a>
+          <a href="#subdomains"><span class="nav-icon">&#9711;</span> Subdomains</a>
+          <a href="#javascript"><span class="nav-icon">{ }</span> JavaScript</a>
+          <a href="#endpoints"><span class="nav-icon">&#8599;</span> Endpoints</a>
+          <a href="#parameters"><span class="nav-icon">#</span> Parameters</a>
+          <a href="#technology"><span class="nav-icon">T</span> Technology</a>
+          <a href="#intelligence"><span class="nav-icon">R</span> Intelligence</a>
+          <a href="#advanced-recon"><span class="nav-icon">+</span> Advanced</a>
+          <a href="#performance"><span class="nav-icon">%</span> Performance</a>
+          <a href="#secrets"><span class="nav-icon">&#9671;</span> Secrets</a>
+          <a href="#screenshots"><span class="nav-icon">&#9638;</span> Screenshots</a>
+          <a href="#findings"><span class="nav-icon">!</span> Findings</a>
+        </nav>
+      </aside>
+
+      <main class="main">
+        <header class="hero" id="overview">
+          <div>
+            <div class="brand"><span class="logo">{% if report_logo_data_uri %}<img src="{{ report_logo_data_uri }}" alt="BladeRecon report logo" style="width:100%;height:100%;object-fit:contain;border-radius:10px;">{% else %}&#x1F5E1;{% endif %}</span><span>BladeRecon</span></div>
+            <h1>{{ target }}</h1>
+            <p>Security assessment report with executive context, scan evidence, and raw data drill-downs.</p>
+            <div class="hero-meta">
+              <span class="hero-pill">Generated <strong>{{ timestamp }}</strong></span>
+              <span class="hero-pill">Duration <strong>{{ scan_duration }}</strong></span>
+              <span class="hero-pill">Profile <strong>{{ scan_profile }}</strong></span>
+              <span class="hero-pill">Framework <strong>{{ framework_version }}</strong></span>
+              <span class="hero-pill">Report <strong>v{{ report_version }}</strong></span>
+            </div>
+          </div>
+          <aside class="risk-panel" aria-label="Risk summary">
+            <div class="risk-score">
+              <div>
+                <div class="label">Risk Score</div>
+                <strong>{% if risk_score %}{{ risk_score.get("score", 0) }}{% else %}0{% endif %}</strong>
+                <span class="muted">/100</span>
+              </div>
+              <span class="risk-level">{% if risk_score %}{{ risk_score.get("level", "Not classified") }}{% else %}Not Run{% endif %}</span>
+            </div>
+            <div class="risk-panel-grid">
+              <div class="risk-mini"><div class="label">Findings</div><div class="value">{{ nuclei_status }}</div></div>
+              <div class="risk-mini"><div class="label">Alive Hosts</div><div class="value">{{ alive_count }}</div></div>
+              <div class="risk-mini"><div class="label">Screenshots</div><div class="value">{{ screenshots_status }}</div></div>
+              <div class="risk-mini"><div class="label">Technologies</div><div class="value">{{ attack_surface.technology_count }}</div></div>
+            </div>
+          </aside>
+        </header>
+
+        <div class="toolbar">
+          <div class="muted">Use the navigation and collapsed panels to inspect only what matters.</div>
+          <div class="actions">
+            <a class="btn" href="report.md">Export Markdown</a>
+            <a class="btn" href="report.html" download>Export HTML</a>
+            <button class="btn" id="copySummary" type="button">Copy Summary</button>
+          </div>
+        </div>
+
+        <section class="section" id="executive-summary">
+          <div class="section-head">
+            <div>
+              <h2>Executive Summary</h2>
+              <small>Operational totals from the completed scan</small>
+            </div>
+          </div>
+          <div class="grid kpis">
+          <div class="card kpi-card executive-card"><div><div class="metric-icon">&#9670;</div><span class="metric-number">{{ attack_surface.total_assets }}</span></div><span class="metric-label">Total Assets</span></div>
+          <div class="card kpi-card"><div><div class="metric-icon">&#9679;</div><span class="metric-number">{{ alive_count }}</span></div><span class="metric-label">Alive Hosts</span></div>
+          <div class="card kpi-card"><div><div class="metric-icon">!</div><span class="metric-number {% if nuclei_status is string %}status-number{% endif %}">{{ nuclei_status }}</span></div><span class="metric-label">Findings Count</span></div>
+          <div class="card kpi-card" title="{{ screenshots_status }}"><div><div class="metric-icon">&#9638;</div><span class="metric-number {% if screenshots_skipped_reason %}status-number{% endif %}">{% if screenshots_skipped_reason %}Skipped{% else %}{{ screenshots_status }}{% endif %}</span><div class="metric-note">{% if screenshots_skipped_reason %}Dependency unavailable{% endif %}</div></div><span class="metric-label">Screenshots Captured</span></div>
+          <div class="card kpi-card"><div><div class="metric-icon">T</div><span class="metric-number">{{ attack_surface.technology_count }}</span></div><span class="metric-label">Technologies Detected</span></div>
+          <div class="card kpi-card" title="{{ parameters_status }}"><div><div class="metric-icon">&#35;</div><span class="metric-number {% if parameters_skipped_reason %}status-number{% endif %}">{% if parameters_skipped_reason %}Skipped{% else %}{{ parameters | length }}{% endif %}</span><div class="metric-note">{% if parameters_skipped_reason %}No URL surface{% endif %}</div></div><span class="metric-label">Parameters Found</span></div>
+          <div class="card kpi-card"><div><div class="metric-icon">/</div><span class="metric-number">{{ endpoints | length }}</span></div><span class="metric-label">Endpoints Found</span></div>
+          </div>
+        </section>
+
+        <section class="section card summary-card">
+          <div class="section-head">
+            <h2>Attack Surface Summary</h2>
+            <small>Generated by BladeRecon</small>
+          </div>
+          <ul>
+            <li><strong>{{ subdomains | length }}</strong> subdomains discovered.</li>
+            <li><strong>{{ alive_count }}</strong> alive hosts detected.</li>
+            <li><strong>{{ js_files | length }}</strong> JavaScript assets identified.</li>
+            <li><strong>{{ endpoints | length }}</strong> endpoint candidates extracted.</li>
+            <li>{% if parameters_skipped_reason %}Parameters: <strong>Skipped</strong> ({{ parameters_skipped_reason }}).{% else %}<strong>{{ parameter_intelligence.total_count }}</strong> parameters identified: {{ parameter_intelligence.discovered_count }} discovered, {{ parameter_intelligence.candidate_count }} candidates.{% endif %}</li>
+            <li>{% if secrets %}<strong>{{ secrets | length }}</strong> exposed secret pattern matches detected.{% else %}No exposed secrets detected.{% endif %}</li>
+            <li>{% if nuclei_skipped_reason %}Nuclei: <strong>{{ nuclei_status_label }}</strong> ({{ nuclei_skipped_reason }}).{% elif nuclei_available %}<strong>{{ nuclei_count }}</strong> Nuclei findings available.{% else %}No Nuclei findings available.{% endif %}</li>
+            {% if advanced_metadata %}<li><strong>{{ historical_urls | length }}</strong> historical URLs, <strong>{{ content_discovery | length }}</strong> interesting paths, and <strong>{{ asset_priority.get("asset_count", 0) }}</strong> priority assets added by advanced recon.</li>{% endif %}
+          </ul>
+        </section>
+
+        <section class="section" id="performance">
+          <details class="data-panel">
+            <summary><span class="summary-title"><strong>Performance Analytics</strong><small>Scan timing, resource usage, and module-level runtime metrics.</small></span><span class="summary-count">{{ performance.total_duration }}</span></summary>
+            <div class="panel-body">
+              <div class="intel-grid">
+                <div class="intel-item" title="{{ performance.scan_start_time_raw }}"><span class="intel-value time-value">{{ performance.scan_start_time }}</span><span class="intel-label">Scan Start Time</span></div>
+                <div class="intel-item" title="{{ performance.scan_end_time_raw }}"><span class="intel-value time-value">{{ performance.scan_end_time }}</span><span class="intel-label">Scan End Time</span></div>
+                <div class="intel-item"><span class="intel-value">{{ performance.total_duration }}</span><span class="intel-label">Total Duration</span></div>
+                <div class="intel-item"><span class="intel-value">{{ performance.peak_ram_mb }} MB</span><span class="intel-label">Peak RAM Usage</span></div>
+                <div class="intel-item"><span class="intel-value">{{ performance.average_ram_mb }} MB</span><span class="intel-label">Average RAM Usage</span></div>
+                <div class="intel-item" title="{{ performance.cpu_note }}"><span class="intel-value">{{ performance.peak_cpu_percent }}%</span><span class="intel-label">Peak CPU Core Utilization</span><span class="intel-note">Process sample; may exceed 100% on multi-core work.</span></div>
+                <div class="intel-item" title="{{ performance.cpu_note }}"><span class="intel-value">{{ performance.average_cpu_percent }}%</span><span class="intel-label">Average CPU Core Utilization</span><span class="intel-note">Process sample across the scan window.</span></div>
+                <div class="intel-item" title="{{ performance.traffic_note }}"><span class="intel-value">{{ performance.total_requests_sent }}</span><span class="intel-label">Probe Requests Attempted</span><span class="intel-note">HTTP probe targets attempted.</span></div>
+                <div class="intel-item" title="{{ performance.traffic_note }}"><span class="intel-value">{{ performance.total_responses_received }}</span><span class="intel-label">HTTP Responses Recorded</span><span class="intel-note">Probe rows with status codes.</span></div>
+                <div class="intel-item"><span class="intel-value">{{ performance.module_count }}</span><span class="intel-label">Module Count</span></div>
+              </div>
+              <p class="muted">{{ performance.traffic_note }}</p>
+              {% if performance.top_slowest_modules or performance.top_ram_consumers %}
+              <div class="ranking-grid">
+                <div class="ranking-card">
+                  <span class="label">Top Slowest Modules</span>
+                  <ol class="ranking-list">
+                    {% for row in performance.top_slowest_modules %}
+                    <li><span><span class="rank-index">{{ loop.index }}.</span> {{ row.module }}</span><strong>{{ row.duration_seconds }}s</strong></li>
+                    {% else %}
+                    <li>No completed module timing recorded</li>
+                    {% endfor %}
+                  </ol>
+                </div>
+                <div class="ranking-card">
+                  <span class="label">Top RAM Consumers</span>
+                  <ol class="ranking-list">
+                    {% for row in performance.top_ram_consumers %}
+                    <li><span><span class="rank-index">{{ loop.index }}.</span> {{ row.module }}</span><strong>{{ row.peak_ram_mb }} MB</strong></li>
+                    {% else %}
+                    <li>No module memory data recorded</li>
+                    {% endfor %}
+                  </ol>
+                </div>
+              </div>
+              {% endif %}
+              <div class="section-head" style="margin-top: 18px;"><h3>Module Performance</h3><small>Peak and average RAM are process-level samples during each module.</small></div>
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>Module</th><th>Status</th><th>Duration</th><th>Peak RAM</th><th>Average RAM</th></tr></thead>
+                  <tbody>
+                    {% for row in performance.modules %}
+                    <tr><td>{{ row.module }}</td><td>{{ row.status }}</td><td>{{ row.duration_seconds }}s</td><td>{{ row.peak_ram_mb }} MB</td><td>{{ row.average_ram_mb }} MB</td></tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </details>
+        </section>
+
+        <section class="section card intel-card">
+          <div class="section-head">
+            <div>
+              <h2>Attack Surface Overview</h2>
+              <small>Signal-first intelligence summary</small>
+            </div>
+          </div>
+          <div class="intel-grid">
+            <div class="intel-item"><span class="intel-value">{{ attack_surface.total_assets }}</span><span class="intel-label">Assets</span></div>
+            <div class="intel-item"><span class="intel-value">{{ attack_surface.alive_assets }}</span><span class="intel-label">Alive</span></div>
+            <div class="intel-item"><span class="intel-value">{{ js_files | length }}</span><span class="intel-label">JS Assets</span></div>
+            <div class="intel-item"><span class="intel-value">{{ endpoints | length }}</span><span class="intel-label">Endpoints</span></div>
+            <div class="intel-item"><span class="intel-value {% if parameters_skipped_reason %}status-number{% endif %}">{% if parameters_skipped_reason %}Skipped{% else %}{{ parameters | length }}{% endif %}</span><span class="intel-label">Parameters</span></div>
+            <div class="intel-item"><span class="intel-value">{% if attack_surface.total_assets %}{{ ((attack_surface.alive_assets / attack_surface.total_assets) * 100) | round(1) }}%{% else %}0%{% endif %}</span><span class="intel-label">Coverage</span></div>
+          </div>
+          <div class="intel-row">
+            <div><span class="label">Technology Stack</span><div class="chips">{% for item in attack_surface.technology_stack %}<span class="chip">{{ item }}</span>{% else %}<span class="muted">No technologies identified</span>{% endfor %}</div></div>
+            <div><span class="label">WAF</span> {% if attack_surface.waf_detected %}<span class="badge high">Detected</span>{% else %}<span class="badge passive">Not Detected</span>{% endif %}</div>
+          </div>
+        </section>
+
+        <section class="section card" id="technology">
+          <div class="section-head">
+            <h2>Technology Overview</h2>
+            <small>{{ attack_surface.technology_count }} technologies detected</small>
+          </div>
+          {% if attack_surface.technologies or attack_surface.cdn_detected or attack_surface.waf_detected or attack_surface.servers %}
+          {% if attack_surface.most_common_technologies %}
+          <div class="section-head" style="margin-top: 10px;">
+            <h3>Most Common Technologies</h3>
+            <small>Observed across probed hosts</small>
+          </div>
+          <div class="chips">
+            {% for item in attack_surface.most_common_technologies %}
+            <span class="chip">{{ item[0] }}: {{ item[1] }}</span>
+            {% endfor %}
+          </div>
+          {% endif %}
+          {% if attack_surface.technology_categories %}
+          <div class="section-head" style="margin-top: 18px;">
+            <h3>Technology Categories</h3>
+            <small>Normalized from headers, CDN, WAF, and HTML fingerprints</small>
+          </div>
+          {% if attack_surface.technology_roles %}
+          <div class="section-head" style="margin-top: 12px;">
+            <h3>Technology Roles</h3>
+            <small>Unique products with observed roles</small>
+          </div>
+          <div class="chips" style="margin-bottom: 14px;">
+            {% for tech, roles in attack_surface.technology_roles.items() %}
+            <span class="chip">{{ tech }}: {{ roles | join(" / ") }}</span>
+            {% endfor %}
+          </div>
+          {% endif %}
+          <div class="intel-row">
+            {% for category, values in attack_surface.technology_categories.items() %}
+            <div class="intel-item">
+              <span class="label">{{ category }}</span>
+              <div class="chips" style="margin-top: 8px;">{% for item in values %}<span class="chip">{{ item }}</span>{% endfor %}</div>
+            </div>
+            {% endfor %}
+          </div>
+          {% endif %}
+          {% if attack_surface.technology_details %}
+          <div class="section-head" style="margin-top: 18px;">
+            <h3>Technology Evidence</h3>
+            <small>Confidence and source tracking for normalized detections</small>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Technology</th><th>Confidence</th><th>Sources</th><th>Evidence</th><th>Hosts</th></tr></thead>
+              <tbody>
+                {% for item in attack_surface.technology_details %}
+                <tr>
+                  <td>{{ item.name }}</td>
+                  <td><span class="badge {% if item.confidence == 'High' %}low{% elif item.confidence == 'Medium' %}medium{% else %}info{% endif %}">{{ item.confidence }}</span></td>
+                  <td>{{ item.sources | join(", ") if item.sources else "Not recorded" }}</td>
+                  <td>{{ item.evidence[:2] | join("; ") if item.evidence else "Not recorded" }}</td>
+                  <td>{{ item.hosts[:3] | join(", ") if item.hosts else "Not recorded" }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% endif %}
+          {% else %}
+          <div class="empty">No technologies identified</div>
+          {% endif %}
+        </section>
+
+        <section class="section card" id="intelligence">
+          <div class="section-head">
+            <h2>Recon Intelligence</h2>
+            <small>Risk, infrastructure, cloud, and smart scanning context</small>
+          </div>
+          <div class="grid intel-grid">
+            <div class="intel-item"><span class="intel-value">{% if risk_score %}{{ risk_score.get("score", 0) }}/100{% else %}Not Run{% endif %}</span><span class="intel-label">Risk Score{% if risk_score %} ({{ risk_score.get("level", "Not classified") }}){% endif %}</span></div>
+            <div class="intel-item"><span class="intel-value">{{ infrastructure.get("assets", []) | length }}</span><span class="intel-label">Infrastructure Assets</span></div>
+            <div class="intel-item"><span class="intel-value">{{ cloud_assets | length }}</span><span class="intel-label">Cloud Assets</span></div>
+            <div class="intel-item"><span class="intel-value">{{ historical_dns.get("historical_hosts", []) | length }}</span><span class="intel-label">Historical Hosts</span></div>
+          </div>
+          {% if risk_score and risk_score.get("factors") %}
+          <div class="chips" style="margin-top: 14px;">
+            {% for factor in risk_score.get("factors", []) %}
+            <span class="chip">{{ factor }}</span>
+            {% endfor %}
+          </div>
+          {% endif %}
+          {% if infrastructure.get("assets") %}
+          <div class="section-head" style="margin-top: 18px;"><h3>Infrastructure Intelligence</h3><small>Resolved hosts and provider hints</small></div>
+          <div class="chips">
+            {% for asset in infrastructure.get("assets", [])[:10] %}
+            <span class="chip">{{ asset.get("host", "") }}{% if asset.get("ip") %} -> {{ asset.get("ip") }}{% endif %}</span>
+            {% endfor %}
+          </div>
+          {% endif %}
+          {% if cloud_assets %}
+          <div class="section-head" style="margin-top: 18px;"><h3>Cloud Assets</h3><small>References found in scan artifacts</small></div>
+          <div class="chips">
+            {% for asset in cloud_assets[:12] %}
+            <span class="chip">{{ asset.get("type") }}: {{ asset.get("value") }}</span>
+            {% endfor %}
+          </div>
+          {% endif %}
+          {% if template_intelligence %}
+          <div class="section-head" style="margin-top: 18px;"><h3>Smart Nuclei Summary</h3><small>{{ template_intelligence.get("templates_available", "Not Run") }} templates available</small></div>
+          <div class="chips">
+            {% for tag in template_intelligence.get("selected_tags", []) %}
+            <span class="chip">{{ tag }}</span>
+            {% endfor %}
+          </div>
+          {% endif %}
+        </section>
+
+        <section class="section card" id="advanced-recon">
+          <div class="section-head">
+            <div>
+              <h2>Advanced Recon Intelligence</h2>
+              <small>Historical coverage, targeted discovery, security-header assets, and priority ranking</small>
+            </div>
+          </div>
+          <div class="intel-grid">
+            <div class="intel-item"><span class="intel-value">{{ historical_urls | length }}</span><span class="intel-label">Historical URLs</span></div>
+            <div class="intel-item"><span class="intel-value">{{ historical_endpoints | length }}</span><span class="intel-label">Historical Endpoints</span></div>
+            <div class="intel-item"><span class="intel-value">{{ historical_diff.get("removed_apis", []) | length }}</span><span class="intel-label">Removed APIs</span></div>
+            <div class="intel-item"><span class="intel-value">{{ content_discovery | length }}</span><span class="intel-label">Interesting Paths</span></div>
+            <div class="intel-item"><span class="intel-value">{{ security_header_assets.get("assets", []) | length }}</span><span class="intel-label">Header Assets</span></div>
+            <div class="intel-item"><span class="intel-value">{{ historical_js.get("endpoints", []) | length }}</span><span class="intel-label">Historical JS Endpoints</span></div>
+          </div>
+          {% if asset_priority.get("top_assets") %}
+          <div class="section-head" style="margin-top: 18px;"><h3>Top Priority Assets</h3><small>Researcher focus queue</small></div>
+          <div class="ranking-grid">
+            {% for item in asset_priority.get("top_assets", [])[:6] %}
+            <div class="ranking-card">
+              <span class="label">Score {{ item.score }}/100</span>
+              <div class="value">{{ item.asset }}</div>
+              <small>{{ item.reasons[:3] | join(", ") }}</small>
+            </div>
+            {% endfor %}
+          </div>
+          {% endif %}
+          <details class="data-panel" style="margin-top: 18px;">
+            <summary><span class="summary-title"><strong>Advanced Recon Details</strong><small>Historical diffs, header assets, paths, and historical JS findings</small></span><span class="summary-count">{{ advanced_metadata.get("requests_sent", 0) }} requests</span></summary>
+            <div class="panel-body">
+              <div class="ranking-grid">
+                <div class="ranking-card">
+                  <span class="label">Historical Attack Surface</span>
+                  <ul class="ranking-list">
+                    <li><span>Legacy paths</span><strong>{{ historical_diff.get("legacy_paths", []) | length }}</strong></li>
+                    <li><span>Deprecated endpoints</span><strong>{{ historical_diff.get("deprecated_endpoints", []) | length }}</strong></li>
+                    <li><span>Potentially forgotten</span><strong>{{ historical_diff.get("potentially_forgotten_assets", []) | length }}</strong></li>
+                  </ul>
+                </div>
+                <div class="ranking-card">
+                  <span class="label">Quality Controls</span>
+                  <ul class="ranking-list">
+                    <li><span>Content SNR</span><strong>{{ advanced_metadata.get("content_discovery", {}).get("signal_to_noise_ratio", 0) }}</strong></li>
+                    <li><span>Historical JS SNR</span><strong>{{ advanced_metadata.get("historical_js", {}).get("signal_to_noise_ratio", 0) }}</strong></li>
+                    <li><span>Profile</span><strong>{{ scan_profile }}</strong></li>
+                  </ul>
+                </div>
+              </div>
+              {% if content_discovery %}
+              <div class="section-head" style="margin-top: 18px;"><h3>Interesting Paths</h3><small>Focused discovery results</small></div>
+              <div class="chips">{% for item in content_discovery[:20] %}<span class="chip">{{ item.path }} {{ item.status_code }}</span>{% endfor %}</div>
+              {% endif %}
+              {% if security_header_assets.get("assets") %}
+              <div class="section-head" style="margin-top: 18px;"><h3>Security Header Assets</h3><small>CSP, CORS, and policy-derived assets</small></div>
+              <div class="chips">{% for item in security_header_assets.get("assets", [])[:20] %}<span class="chip">{{ item.asset }}: {{ item.type }}</span>{% endfor %}</div>
+              {% endif %}
+            </div>
+          </details>
+        </section>
+
+        <section class="section">
+          <div class="section-head">
+            <h2>Severity Dashboard</h2>
+            <small>{% if nuclei_skipped_reason %}Nuclei scan status{% else %}{{ nuclei_count }} total findings{% endif %}</small>
+          </div>
+          {% if nuclei_skipped_reason %}
+          <div class="card status-card">
+            <span class="badge medium">Nuclei Status</span>
+            <span class="metric-number status-number">Skipped</span>
+            <span class="metric-label">Reason: {{ nuclei_skipped_reason }}</span>
+          </div>
+          {% else %}
+          <div class="severity-chart" aria-label="Severity distribution chart">
+            <div class="severity-track">
+              {% for sev in ["critical", "high", "medium", "low", "info"] %}
+              <span class="severity-segment {{ sev }}" data-severity-count="{{ nuclei_severity_counts.get(sev, 0) }}" title="{{ sev | title }}: {{ nuclei_severity_counts.get(sev, 0) }}"></span>
+              {% endfor %}
+            </div>
+            <div class="severity-legend">
+              {% for sev in ["critical", "high", "medium", "low", "info"] %}
+              <span class="chip"><span class="legend-dot" style="background: var(--{{ sev }});"></span>{{ sev | title }}: {{ nuclei_severity_counts.get(sev, 0) }}</span>
+              {% endfor %}
+            </div>
+          </div>
+          <div class="grid severity-grid">
+            {% for sev in ["critical", "high", "medium", "low", "info"] %}
+            <div class="card severity {{ sev }}">
+              <span class="metric-number">{{ nuclei_severity_counts.get(sev, 0) }}</span>
+              <span class="metric-label">{{ sev | title }}</span>
+            </div>
+            {% endfor %}
+          </div>
+          {% if nuclei_metadata %}
+          <div class="grid intel-grid">
+            <div class="intel-item"><span class="intel-value">{{ nuclei_metadata.get("templates_executed", "Not recorded") }}</span><span class="intel-label">Templates Executed</span></div>
+            <div class="intel-item"><span class="intel-value">{{ nuclei_metadata.get("templates_skipped", "Not recorded") }}</span><span class="intel-label">Templates Skipped</span></div>
+            <div class="intel-item"><span class="intel-value">{{ nuclei_metadata.get("duration_seconds", "Not recorded") }}s</span><span class="intel-label">Nuclei Duration</span></div>
+            <div class="intel-item"><span class="intel-value">{{ nuclei_metadata.get("findings_count", nuclei_count) }}</span><span class="intel-label">Findings Count</span></div>
+          </div>
+          {% endif %}
+          {% endif %}
+        </section>
+
+        <section class="section" id="data-panels">
+          <details class="data-panel" id="subdomains">
+            <summary><span class="summary-title"><strong>Subdomains</strong><small>Preview first 20 rows. Expand for full list.</small></span><span class="summary-count">{{ subdomains | length }}</span></summary>
+            <div class="panel-body" data-panel="subdomains"></div>
+          </details>
+
+          <details class="data-panel" id="javascript">
+            <summary><span class="summary-title"><strong>JavaScript Files</strong><small>Preview first 20 rows. Expand for full list.</small></span><span class="summary-count">{{ js_files | length }}</span></summary>
+            <div class="panel-body" data-panel="javascript"></div>
+          </details>
+
+          <details class="data-panel" id="endpoints">
+            <summary><span class="summary-title"><strong>Endpoints</strong><small>Preview first 20 rows. Expand for full list.</small></span><span class="summary-count">{{ endpoints | length }}</span></summary>
+            <div class="panel-body" data-panel="endpoints"></div>
+          </details>
+
+          <details class="data-panel" id="parameters">
+            <summary><span class="summary-title"><strong>Parameters</strong><small>{% if parameters_skipped_reason %}Skipped: {{ parameters_skipped_reason }}{% else %}Preview first 20 rows. Expand for full list.{% endif %}</small></span><span class="summary-count">{{ parameters_status }}</span></summary>
+            <div class="panel-body" data-panel="parameters"></div>
+          </details>
+
+          <details class="data-panel" id="secrets">
+            <summary><span class="summary-title"><strong>Secrets</strong><small>Preview first 20 rows. Expand for full list.</small></span><span class="summary-count">{{ secrets | length }}</span></summary>
+            <div class="panel-body" data-panel="secrets"></div>
+          </details>
+
+          <details class="data-panel" id="screenshots">
+            <summary><span class="summary-title"><strong>Screenshots</strong><small>{% if screenshots_skipped_reason %}Skipped: {{ screenshots_skipped_reason }}{% else %}Preview first 20 captures. Expand for gallery.{% endif %}</small></span><span class="summary-count">{{ screenshots_status }}</span></summary>
+            <div class="panel-body" data-panel="screenshots"></div>
+          </details>
+
+          <details class="data-panel" id="findings">
+            <summary><span class="summary-title"><strong>Nuclei Findings</strong><small>{% if nuclei_skipped_reason %}{{ nuclei_status_label }}: {{ nuclei_skipped_reason }}{% else %}Preview first 20 findings. Expand for full list.{% endif %}</small></span><span class="summary-count">{{ nuclei_status }}</span></summary>
+            <div class="panel-body" data-panel="findings"></div>
+          </details>
+        </section>
+
+        <footer class="footer">
+          <div>Generated by BladeRecon v{{ version }}</div>
+          <div>Developed by Mohamed Kotb &middot; github.com/mohamedxk9tb</div>
+        </footer>
+      </main>
+    </div>
+
+    <div class="lightbox" id="screenshotLightbox" aria-hidden="true">
+      <button class="btn" type="button" data-lightbox-close>Close</button>
+      <img src="" alt="Expanded screenshot">
+    </div>
+
+    <script>
+      const PREVIEW_LIMIT = 20;
+      const data = {
+        target: {{ target | tojson }},
+        subdomains: [
+          {% for s in subdomains %}
+          {subdomain: {{ s | tojson }}, status: {{ ("Alive" if s in alive_hostnames else "Passive") | tojson }}, sources: {{ subdomain_sources.get(s, ["Passive"]) | tojson }} }{% if not loop.last %},{% endif %}
+          {% endfor %}
+        ],
+        jsFiles: {{ js_files | tojson }},
+        endpoints: {{ endpoints | tojson }},
+        parameters: {{ parameters | tojson }},
+        parameterIntel: {{ parameter_intelligence | tojson }},
+        parametersSkippedReason: {{ parameters_skipped_reason | tojson }},
+        secrets: {{ secrets | tojson }},
+        screenshots: {{ screenshots | tojson }},
+        screenshotFailures: {{ screenshot_failures | tojson }},
+        nuclei: {{ nuclei | tojson }},
+        nucleiAvailable: {{ nuclei_available | tojson }},
+        screenshotsAvailable: {{ screenshots_available | tojson }},
+        nucleiSkippedReason: {{ nuclei_skipped_reason | tojson }},
+        screenshotsSkippedReason: {{ screenshots_skipped_reason | tojson }}
+      };
+      const discoveredParameterSet = new Set((data.parameterIntel.discovered || []).map((item) => String(item).toLowerCase()));
+
+      const escapeHtml = (value) => String(value ?? '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#039;');
+
+      const categoryBadge = (label, cls = 'info') => `<span class="badge ${cls}">${escapeHtml(label)}</span>`;
+      const code = (value) => `<code>${escapeHtml(value)}</code>`;
+
+      function parameterCategory(name) {
+        const value = String(name || '').toLowerCase();
+        if (/(auth|token|session|jwt|key|password|secret|csrf)/.test(value)) return 'Authentication';
+        if (/(redirect|url|next|return|callback)/.test(value)) return 'Redirect';
+        if (/(page|limit|offset|cursor|sort|order)/.test(value)) return 'Pagination';
+        if (/(file|path|upload|download|image|media)/.test(value)) return 'Files';
+        if (/(api|endpoint|graphql|rest)/.test(value)) return 'API';
+        if (/(q|query|search|keyword|term)/.test(value)) return 'Search';
+        return 'General';
+      }
+
+      function parameterValueLevel(name) {
+        const value = String(name || '').toLowerCase();
+        const high = ['access_token', 'refresh_token', 'api_key', 'authorization', 'token', 'jwt', 'secret', 'session', 'auth', 'key'];
+        const medium = ['account_id', 'return_url', 'user_id', 'redirect', 'callback', 'email', 'username', 'id'];
+        const low = ['filter', 'page', 'sort', 'lang', 'theme', 'view', 'tab'];
+        if (high.some((item) => value === item || value.includes(item))) return 'High';
+        if (medium.some((item) => value === item || value.includes(item))) return 'Medium';
+        if (low.some((item) => value === item || value.includes(item))) return 'Low';
+        return 'Low';
+      }
+
+      function parameterSource(name) {
+        return discoveredParameterSet.has(String(name || '').toLowerCase()) ? 'Discovered' : 'Candidate';
+      }
+
+      function subdomainCategory(host) {
+        const value = String(host || '').toLowerCase();
+        if (/(^|[.-])api[.-]/.test(value) || value.includes('graphql') || value.includes('rest')) return 'API';
+        if (/(admin|panel|console|dashboard|cpanel|manager)/.test(value)) return 'Admin';
+        if (/(dev|stage|staging|test|qa|uat|beta|sandbox)/.test(value)) return 'Development';
+        if (/(mail|smtp|imap|mx|webmail)/.test(value)) return 'Mail';
+        return 'General';
+      }
+
+      function summarize(items, keyFn) {
+        const counts = {};
+        items.forEach((item) => {
+          const key = keyFn(item);
+          counts[key] = (counts[key] || 0) + 1;
+        });
+        return Object.entries(counts).sort((a, b) => b[1] - a[1]);
+      }
+
+      function summaryChips(entries) {
+        if (!entries.length) return '';
+        return `<div class="category-row">${entries.map(([label, count]) => `<span class="chip">${escapeHtml(label)}: ${count}</span>`).join('')}</div>`;
+      }
+
+      function endpointIntelCategory(item) {
+        const value = String(item.endpoint || '').toLowerCase();
+        const raw = String(item.category || '').toLowerCase();
+        if (raw.includes('graphql') || value.includes('graphql')) return 'GraphQL';
+        if (raw.includes('swagger') || raw.includes('openapi') || /(swagger|openapi|api-docs)/.test(value)) return 'Swagger/OpenAPI';
+        if (raw.includes('websocket') || value.startsWith('ws://') || value.startsWith('wss://') || value.includes('socket.io')) return 'WebSocket';
+        if (/(auth|login|logout|register|oauth|sso|session)/.test(value)) return 'Authentication';
+        if (/(admin|panel|console|dashboard|manage)/.test(value)) return 'Admin';
+        if (/(\/api\/|\/api$|\/v[0-9]+\/|\/rest)/.test(value)) return 'REST APIs';
+        return 'Other';
+      }
+
+      function filterItems(items, query, textFn) {
+        if (!query) return items;
+        const needle = query.toLowerCase();
+        return items.filter((item) => textFn(item).toLowerCase().includes(needle));
+      }
+
+      function table(headers, rows) {
+        if (!rows.length) return `<div class="empty">No matching data</div>`;
+        return `<div class="table-wrap"><table><thead><tr>${headers.map((h) => `<th>${escapeHtml(h)}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table></div>`;
+      }
+
+      function panelScaffold(name, total, exportLinks = '') {
+        return `
+          <div class="panel-tools">
+            <input class="search section-search" data-search-panel="${name}" type="search" placeholder="Search ${name}">
+            <div class="actions">${exportLinks}</div>
+          </div>
+          <div class="muted panel-count" data-count-panel="${name}">Showing ${Math.min(PREVIEW_LIMIT, total)} of ${total}</div>
+          <div data-summary-panel="${name}"></div>
+          <div data-table-panel="${name}"></div>
+        `;
+      }
+
+      const renderers = {
+        subdomains(full = false, query = '') {
+          const items = filterItems(data.subdomains, query, (item) => `${item.subdomain} ${item.status} ${item.sources.join(' ')} ${subdomainCategory(item.subdomain)}`);
+          const visible = full || query ? items : items.slice(0, PREVIEW_LIMIT);
+          const rows = visible.map((item) => `<tr><td>${code(item.subdomain)}</td><td>${categoryBadge(item.status, item.status === 'Alive' ? 'alive' : 'passive')}</td><td>${item.sources.map((s) => categoryBadge(s)).join('')}</td></tr>`);
+          return {
+            count: `Showing ${visible.length} of ${items.length} Subdomains`,
+            summary: summaryChips(summarize(data.subdomains, (item) => subdomainCategory(item.subdomain))),
+            table: table(['Subdomain', 'Status', 'Source'], rows)
+          };
+        },
+        javascript(full = false, query = '') {
+          const items = filterItems(data.jsFiles, query, (item) => `${item.url || ''} ${item.source_page || ''}`);
+          const visible = full || query ? items : items.slice(0, PREVIEW_LIMIT);
+          const rows = visible.map((item) => `<tr><td>${code(item.url || '')}</td><td>${code(item.source_page || '')}</td></tr>`);
+          return {
+            count: `Showing ${visible.length} of ${items.length} JavaScript Files`,
+            summary: summaryChips(summarize(data.jsFiles, (item) => {
+              const path = String(item.url || '').toLowerCase();
+              if (path.includes('chunk')) return 'Chunks';
+              if (path.includes('vendor')) return 'Vendor';
+              if (path.includes('bundle')) return 'Bundles';
+              return 'Assets';
+            })),
+            table: table(['URL', 'Source Page'], rows)
+          };
+        },
+        endpoints(full = false, query = '') {
+          const items = filterItems(data.endpoints, query, (item) => `${item.endpoint || ''} ${endpointIntelCategory(item)} ${item.source_js_file || item.source || ''}`);
+          const visible = full || query ? items : items.slice(0, PREVIEW_LIMIT);
+          const rows = visible.map((item) => `<tr><td>${code(item.endpoint || '')}</td><td>${categoryBadge(endpointIntelCategory(item))}</td><td>${code(item.source_js_file || item.source || '')}</td></tr>`);
+          return {
+            count: `Showing ${visible.length} of ${items.length} Endpoints`,
+            summary: summaryChips(summarize(data.endpoints, endpointIntelCategory)),
+            table: table(['Endpoint', 'Category', 'Source'], rows)
+          };
+        },
+        parameters(full = false, query = '') {
+          if (data.parametersSkippedReason) {
+            return {count: `Parameters: Skipped (${data.parametersSkippedReason})`, summary: '', table: `<div class="empty">Parameters: Skipped (${escapeHtml(data.parametersSkippedReason)})</div>`};
+          }
+          const intel = data.parameterIntel || {};
+          const items = filterItems(data.parameters, query, (item) => `${item} ${parameterCategory(item)} ${parameterValueLevel(item)} ${parameterSource(item)}`);
+          const visible = full || query ? items : items.slice(0, PREVIEW_LIMIT);
+          const rows = visible.map((item) => {
+            const category = parameterCategory(item);
+            const source = parameterSource(item);
+            const level = parameterValueLevel(item);
+            const categoryCls = category === 'Authentication' ? 'high' : category === 'Files' ? 'medium' : category === 'Redirect' ? 'info' : 'passive';
+            const levelCls = level === 'High' ? 'high' : level === 'Medium' ? 'medium' : 'low';
+            return `<tr><td>${code(item)}</td><td>${categoryBadge(source, source === 'Discovered' ? 'alive' : 'passive')}</td><td>${categoryBadge(level, levelCls)}</td><td>${categoryBadge(category, categoryCls)}</td></tr>`;
+          });
+          const intelligence = summaryChips([
+            ['Discovered Parameters', intel.discovered_count || 0],
+            ['Candidate Parameters', intel.candidate_count || 0],
+            ['Total Parameters', intel.total_count || 0],
+            ['High Value Parameters', intel.high_count || 0],
+            ['Medium Value Parameters', intel.medium_count || 0],
+            ['Low Value Parameters', intel.low_count || 0]
+          ]);
+          return {
+            count: `Showing ${visible.length} of ${items.length} Parameters`,
+            summary: intelligence + summaryChips(summarize(data.parameters, parameterCategory)),
+            table: table(['Parameter', 'Source', 'Value', 'Risk Category'], rows)
+          };
+        },
+        secrets(full = false, query = '') {
+          const items = filterItems(data.secrets, query, (item) => `${item.type || ''} ${item.confidence || ''} ${item.risk || ''} ${item.value || ''} ${item.source || ''}`);
+          const visible = full || query ? items : items.slice(0, PREVIEW_LIMIT);
+          const rows = visible.map((item) => {
+            const confidence = String(item.confidence || 'LOW').toUpperCase();
+            const cls = confidence === 'HIGH' ? 'high' : confidence === 'MEDIUM' ? 'medium' : 'low';
+            return `<tr><td>${categoryBadge(item.type || 'Secret', cls)}</td><td>${categoryBadge(confidence, cls)}</td><td>${code(item.source || '')}</td><td>${code(item.value_preview || item.value || '')}</td><td>${categoryBadge(item.risk || 'Low', cls)}</td></tr>`;
+          });
+          return {
+            count: `Showing ${visible.length} of ${items.length} Secrets`,
+            summary: summaryChips(summarize(data.secrets, (item) => String(item.confidence || 'LOW').toUpperCase())),
+            table: table(['Secret Type', 'Confidence', 'Source File', 'Value Preview', 'Risk Level'], rows)
+          };
+        },
+        screenshots(full = false, query = '') {
+          if (data.screenshotsSkippedReason) {
+            return {count: `Screenshots: Skipped (${data.screenshotsSkippedReason})`, summary: '', table: `<div class="empty">Screenshots: Skipped (${escapeHtml(data.screenshotsSkippedReason)})<br><br><code>python -m playwright install chromium</code></div>`};
+          }
+          const items = filterItems(data.screenshots, query, (item) => item);
+          const visible = full || query ? items : items.slice(0, PREVIEW_LIMIT);
+          const failures = data.screenshotFailures || [];
+          const failureSummary = failures.length
+            ? summaryChips(summarize(failures, (item) => item.reason || 'Screenshot failed'))
+            : '';
+          const gallery = visible.length
+            ? `<div class="shot-grid">${visible.map((img) => `<article class="card shot-card"><a href="${escapeHtml(img)}" data-lightbox-image="${escapeHtml(img)}"><img src="${escapeHtml(img)}" loading="lazy" alt="${escapeHtml(img)}" onerror="this.closest('.shot-card').classList.add('image-error')"></a><div class="shot-body"><div class="shot-title">${escapeHtml(img)}</div><p><a class="btn" href="${escapeHtml(img)}">Open Full Size</a></p></div></article>`).join('')}</div>`
+            : `<div class="empty">No screenshots captured</div>`;
+          const failedList = failures.length
+            ? `<div class="failed-shot-list">${failures.map((item) => `<div class="failed-shot"><code>${escapeHtml(item.url || item.host || 'unknown target')}</code>${categoryBadge(item.reason || 'Capture failed', 'medium')}</div>`).join('')}</div>`
+            : '';
+          return {count: `Showing ${visible.length} of ${items.length} Screenshots`, summary: failureSummary, table: gallery + failedList};
+        },
+        findings(full = false, query = '') {
+          if (data.nucleiSkippedReason) {
+            return {count: `Nuclei: {{ nuclei_status_label }} (${data.nucleiSkippedReason})`, summary: '', table: `<div class="empty">Nuclei: {{ nuclei_status_label }} (${escapeHtml(data.nucleiSkippedReason)})</div>`};
+          }
+          const flat = Object.entries(data.nuclei || {}).flatMap(([severity, items]) => (items || []).map((item) => ({severity, item})));
+          const items = filterItems(flat, query, (row) => `${row.severity} ${row.item?.info?.name || row.item?.template || ''} ${row.item?.host || row.item?.matched || row.item?.['matched-at'] || ''} ${row.item?.info?.description || ''}`);
+          const visible = full || query ? items : items.slice(0, PREVIEW_LIMIT);
+          const cards = visible.map((row) => {
+            const item = row.item || {};
+            const info = item.info || {};
+            const title = info.name || item.template || 'Unnamed finding';
+            const host = item.host || item.matched || item['matched-at'] || 'unknown host';
+            const template = item.template || item['template-id'] || 'Not recorded';
+            const description = info.description || item.description || 'No description provided.';
+            const evidence = item['extracted-results'] || item['matcher-name'] || item['curl-command'] || item.ip || item.type || '';
+            const refs = Array.isArray(info.reference) ? info.reference : (info.reference ? [info.reference] : []);
+            return `
+              <article class="finding-card ${escapeHtml(row.severity)}">
+                <div class="finding-head">
+                  <div>
+                    <div class="finding-title">${escapeHtml(title)}</div>
+                    <div class="muted">${escapeHtml(description)}</div>
+                  </div>
+                  ${categoryBadge(row.severity, row.severity)}
+                </div>
+                <div class="finding-grid">
+                  <div><span class="label">Host</span><div>${code(host)}</div></div>
+                  <div><span class="label">Template</span><div>${code(template)}</div></div>
+                </div>
+                <div class="finding-evidence"><span class="label">Evidence</span><div>${evidence ? code(Array.isArray(evidence) ? evidence.join(', ') : evidence) : '<span class="muted">No extracted evidence recorded</span>'}</div></div>
+                ${refs.length ? `<div><span class="label">References</span><ul class="reference-list">${refs.slice(0, 4).map((ref) => `<li><a href="${escapeHtml(ref)}">${escapeHtml(ref)}</a></li>`).join('')}</ul></div>` : ''}
+              </article>
+            `;
+          });
+          return {
+            count: `Showing ${visible.length} of ${items.length} Findings`,
+            summary: summaryChips(summarize(flat, (row) => row.severity || 'unknown')),
+            table: cards.length ? `<div class="finding-list">${cards.join('')}</div>` : `<div class="empty">No matching findings</div>`
+          };
+        }
+      };
+
+      const exportsByPanel = {
+        subdomains: `<a class="btn" href="../subdomains/subdomains.txt">Export Subdomains</a><a class="btn" href="../subdomains/subdomains.json">JSON</a>`,
+        javascript: `<a class="btn" href="../js/js_files.txt">Export JS Files</a><a class="btn" href="../js/js_files.json">JSON</a>`,
+        endpoints: `<a class="btn" href="../endpoints/endpoints.txt">Export Endpoints</a><a class="btn" href="../endpoints/endpoints.json">JSON</a>`,
+        parameters: data.parametersSkippedReason ? '' : `<a class="btn" href="../parameters/parameters.txt">Export Parameters</a><a class="btn" href="../parameters/parameters.json">JSON</a>`,
+        secrets: `<a class="btn" href="../secrets/secrets.txt">Export Secrets</a><a class="btn" href="../secrets/secrets.json">JSON</a>`
+      };
+
+      function renderPanel(name, full = false, query = '') {
+        const body = document.querySelector(`[data-panel="${name}"]`);
+        if (!body) return;
+        if (!body.dataset.ready) {
+          const totals = {
+            subdomains: data.subdomains.length,
+            javascript: data.jsFiles.length,
+            endpoints: data.endpoints.length,
+            parameters: data.parameters.length,
+            secrets: data.secrets.length,
+            screenshots: data.screenshots.length,
+            findings: Object.values(data.nuclei || {}).reduce((sum, items) => sum + (items || []).length, 0)
+          };
+          body.innerHTML = panelScaffold(name, totals[name] || 0, exportsByPanel[name] || '');
+          body.dataset.ready = '1';
+          body.querySelector('.section-search')?.addEventListener('input', (event) => renderPanel(name, true, event.target.value.trim()));
+        }
+        const result = renderers[name](full, query);
+        body.querySelector(`[data-count-panel="${name}"]`).textContent = result.count;
+        body.querySelector(`[data-summary-panel="${name}"]`).innerHTML = result.summary;
+        body.querySelector(`[data-table-panel="${name}"]`).innerHTML = result.table;
+        if (name === 'screenshots') wireLightbox(body);
+      }
+
+      function updateSeverityChart() {
+        const segments = [...document.querySelectorAll('.severity-segment')];
+        const total = segments.reduce((sum, item) => sum + Number(item.dataset.severityCount || 0), 0);
+        segments.forEach((item) => {
+          const count = Number(item.dataset.severityCount || 0);
+          item.style.width = total ? `${Math.max((count / total) * 100, count ? 2 : 0)}%` : '0%';
+        });
+      }
+
+      function wireLightbox(scope = document) {
+        const box = document.getElementById('screenshotLightbox');
+        const img = box?.querySelector('img');
+        if (!box || !img) return;
+        scope.querySelectorAll('[data-lightbox-image]').forEach((link) => {
+          if (link.dataset.boundLightbox) return;
+          link.dataset.boundLightbox = '1';
+          link.addEventListener('click', (event) => {
+            event.preventDefault();
+            img.src = link.dataset.lightboxImage || link.getAttribute('href');
+            box.classList.add('open');
+            box.setAttribute('aria-hidden', 'false');
+          });
+        });
+      }
+
+      document.querySelector('[data-lightbox-close]')?.addEventListener('click', () => {
+        const box = document.getElementById('screenshotLightbox');
+        if (!box) return;
+        box.classList.remove('open');
+        box.setAttribute('aria-hidden', 'true');
+      });
+      document.getElementById('screenshotLightbox')?.addEventListener('click', (event) => {
+        if (event.target.id === 'screenshotLightbox') {
+          event.currentTarget.classList.remove('open');
+          event.currentTarget.setAttribute('aria-hidden', 'true');
+        }
+      });
+      updateSeverityChart();
+
+      document.querySelectorAll('.data-panel').forEach((panel) => {
+        const name = panel.querySelector('.panel-body')?.dataset.panel;
+        panel.addEventListener('toggle', () => {
+          if (panel.open && name) renderPanel(name, true);
+        });
+        if (name) renderPanel(name, false);
+      });
+
+      document.getElementById('copySummary')?.addEventListener('click', async () => {
+        const summary = [
+          'BladeRecon Report',
+          `Target: ${data.target}`,
+          `Subdomains: ${data.subdomains.length}`,
+          'Alive Hosts: {{ alive_count }}',
+          `JavaScript Files: ${data.jsFiles.length}`,
+          `Endpoints: ${data.endpoints.length}`,
+          `Secrets: ${data.secrets.length}`,
+          'Parameters: {{ parameters_status }}',
+          'Screenshots: {{ screenshots_status }}',
+          'Findings: {{ nuclei_status }}'
+        ].join('\n');
+        try {
+          await navigator.clipboard.writeText(summary);
+        } catch {
+          const area = document.createElement('textarea');
+          area.value = summary;
+          document.body.appendChild(area);
+          area.select();
+          document.execCommand('copy');
+          area.remove();
+        }
+      });
+
+      const navLinks = [...document.querySelectorAll('.nav a')];
+      const sections = navLinks
+        .map((link) => document.querySelector(link.getAttribute('href')))
+        .filter(Boolean);
+      const setActive = () => {
+        let current = sections[0]?.id || 'overview';
+        sections.forEach((section) => {
+          if (section.getBoundingClientRect().top <= 120) current = section.id;
+        });
+        navLinks.forEach((link) => link.classList.toggle('active', link.getAttribute('href') === `#${current}`));
+      };
+      setActive();
+      document.addEventListener('scroll', setActive, {passive: true});
+    </script>
+  </body>
+</html>
