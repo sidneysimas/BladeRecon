@@ -8,8 +8,8 @@ version = "0.2.0"
 description = "BladeRecon - Fast, lightweight reconnaissance framework for attack surface discovery, bug bounty hunting, and web security assessments."
 readme = "README.md"
 requires-python = ">=3.8"
-license = "MIT"
-license-files = ["LICENSE"]
+license = { text = "MIT" }
+
 authors = [
   { name = "Mohamed Kotb", email = "ma7660@fayoum.edu.eg" }
 ]
