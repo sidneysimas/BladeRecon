@@ -395,26 +395,31 @@ CAMPAIGN_DEFINITIONS = {
         "types": {"API", "GraphQL", "Parameters"},
         "tokens": ("api", "graphql", "swagger", "openapi", "/v1", "/v2", "/v3", "parameter"),
         "strategy": "Authorization testing, IDOR, version diffing, GraphQL introspection, mass assignment, parameter tampering",
+        "weakness": "Authorization gaps, schema exposure, IDOR, mass assignment, or version-specific behavior differences",
     },
     "Administrative Surface": {
         "types": {"Admin"},
         "tokens": ("admin", "dashboard", "console", "manage", "management"),
         "strategy": "Access control review, authentication bypass testing, default credential checks, unauthenticated sub-path review",
+        "weakness": "Unauthenticated access, weak role checks, default credentials, or exposed management functions",
     },
     "Authentication Surface": {
         "types": {"Authentication"},
         "tokens": ("login", "signin", "auth", "oauth", "sso", "account", "session"),
         "strategy": "Session handling, OAuth flow review, password reset testing, authorization boundary checks",
+        "weakness": "Session confusion, OAuth misconfiguration, reset flow abuse, or authorization boundary mistakes",
     },
     "Debug Surface": {
         "types": {"Debug"},
         "tokens": ("debug", "trace", "metrics", "actuator", "health", "diagnostic"),
         "strategy": "Information disclosure testing, stack trace review, environment/config leakage checks, internal service exposure review",
+        "weakness": "Information disclosure, internal configuration leakage, or diagnostic endpoint exposure",
     },
     "Historical Functionality": {
         "types": {"Historical"},
         "tokens": ("historical", "legacy", "deprecated", "old", "removed", "beta"),
         "strategy": "Legacy authorization checks, deprecated parameter handling, version behavior comparison, forgotten endpoint testing",
+        "weakness": "Forgotten endpoints, stale authorization logic, legacy parameters, or removed API behavior still reachable",
     },
 }
 
@@ -427,6 +432,13 @@ def _campaign_confidence(opportunity_count: int, evidence_diversity: int, correl
     if correlation_strength >= 2 or evidence_diversity >= 2:
         return "Medium"
     return "Low"
+
+
+def _cap_label(value: str, max_value: str) -> str:
+    order = ["Low", "Medium", "High", "Very High"]
+    value_index = order.index(value) if value in order else 0
+    max_index = order.index(max_value) if max_value in order else 0
+    return order[min(value_index, max_index)]
 
 
 def _label_from_average(value: float) -> str:
@@ -462,7 +474,6 @@ def _campaign_matches(item: dict, definition: dict) -> bool:
     text_parts = [
         str(item.get("target") or ""),
         str(item.get("reason") or ""),
-        str(item.get("suggested_testing") or ""),
         " ".join(str(value) for value in item.get("evidence_summary", []) if str(value)),
     ]
     for evidence in item.get("evidence", []) if isinstance(item.get("evidence"), list) else []:
@@ -515,6 +526,10 @@ def _build_investigation_campaigns(next_targets: List[dict]) -> List[dict]:
         confidence_scores = {"Very High": 4, "High": 3, "Medium": 2, "Low": 1}
         average_confidence = _label_from_average(sum(confidence_scores.get(str(item.get("confidence") or "Low"), 1) for item in members) / opportunity_count)
         validation_strength = _campaign_validation_strength(members)
+        if validation_strength in {"None", "Weak"}:
+            confidence = _cap_label(confidence, "High" if average_confidence in {"High", "Very High"} else "Medium")
+        if average_confidence == "Low":
+            confidence = _cap_label(confidence, "Low")
         campaigns.append(
             {
                 "name": name,
@@ -525,9 +540,11 @@ def _build_investigation_campaigns(next_targets: List[dict]) -> List[dict]:
                 "positive_validation_signals": positive_validation_signals[:6],
                 "negative_validation_signals": negative_validation_signals[:6],
                 "evidence_summary": evidence_summary[:6],
-                "priority_reason": f"{opportunity_count} related {name.lower()} opportunities with {evidence_diversity} unique evidence sources"
-                + (" and historical support." if historical_support else "."),
+                "priority_reason": f"Related {name.lower()} signals point to a focused manual test path"
+                + (f" across {opportunity_count} targets" if opportunity_count > 1 else "")
+                + (" with historical support." if historical_support else "."),
                 "suggested_testing_strategy": definition["strategy"],
+                "likely_weakness": definition.get("weakness", "Access control, information disclosure, or authorization weakness"),
                 "top_targets": [item.get("target", "") for item in members[:5] if item.get("target")],
                 "max_score": max_score,
                 "correlation_strength": correlation_strength,
@@ -558,6 +575,13 @@ def _research_opportunity_score(next_targets: List[dict], campaigns: List[dict])
     score += confidence_bonus.get(str(top.get("confidence") or "Low"), 0)
     if campaigns:
         score += min(8, len(campaigns) * 2)
+    validation_strength = str(top.get("validation_strength") or "None")
+    if validation_strength == "None":
+        score = min(score, 70)
+    elif validation_strength == "Weak":
+        score = min(score, 85)
+    if "Historical-only" in str(top.get("reason") or ""):
+        score = min(score, 65)
     score = max(0, min(100, score))
     level = "High" if score >= 75 else "Medium" if score >= 45 else "Low"
     return {
@@ -1011,11 +1035,57 @@ def _technology_roles(technology_records: List[dict]) -> Dict[str, List[str]]:
     }
 
 
+def _technology_focus(technology_records: List[dict]) -> Dict[str, List[dict]]:
+    attack_tokens = (
+        "graphql",
+        "swagger",
+        "openapi",
+        "api",
+        "oauth",
+        "sso",
+        "auth",
+        "admin",
+        "django",
+        "rails",
+        "spring",
+        "laravel",
+        "express",
+        "next.js",
+        "nuxt",
+        "wordpress",
+        "drupal",
+    )
+    infrastructure_roles = {"Infrastructure", "Web Server", "CDN", "WAF", "Hosting"}
+    attack_surface: List[dict] = []
+    infrastructure: List[dict] = []
+    for item in technology_records:
+        name = str(item.get("name") or "")
+        roles = {str(role) for role in item.get("roles", [])}
+        haystack = " ".join(
+            [
+                name,
+                " ".join(roles),
+                " ".join(str(value) for value in item.get("evidence", []) if str(value)),
+            ]
+        ).lower()
+        if any(token in haystack for token in attack_tokens) or roles.intersection({"API", "Framework", "CMS"}):
+            attack_surface.append(item)
+        elif roles.intersection(infrastructure_roles):
+            infrastructure.append(item)
+        else:
+            infrastructure.append(item)
+    return {
+        "attack_surface": sorted(attack_surface, key=lambda row: (-int(row.get("count", 0)), str(row.get("name", "")).lower()))[:10],
+        "infrastructure": sorted(infrastructure, key=lambda row: (-int(row.get("count", 0)), str(row.get("name", "")).lower()))[:12],
+    }
+
+
 def _attack_surface(probe_results: List[dict], subdomains: List[str], alive_hosts: List[str], technology_results: Optional[List[dict]] = None) -> dict:
     technology_records = _normalized_technology_records(technology_results or [], probe_results)
     distribution = _technology_distribution(technology_records)
     categories = _technology_categories(technology_records)
     technologies = sorted(distribution)
+    technology_focus = _technology_focus(technology_records)
     wafs = sorted({str(row.get("waf")) for row in probe_results if row.get("waf")})
     cdns = sorted({str(row.get("cdn")) for row in probe_results if row.get("cdn")})
     return {
@@ -1028,6 +1098,8 @@ def _attack_surface(probe_results: List[dict], subdomains: List[str], alive_host
         "technology_categories": categories,
         "technology_roles": _technology_roles(technology_records),
         "technology_details": technology_records,
+        "attack_surface_technologies": technology_focus["attack_surface"],
+        "infrastructure_technologies": technology_focus["infrastructure"],
         "technology_stack": technologies[:6],
         "waf_detected": wafs,
         "cdn_detected": cdns,
@@ -1088,32 +1160,42 @@ def _render_markdown(context: dict, out_md: Path) -> None:
             if positive_rows:
                 lines.append(f"- Confirming signal: {'; '.join(str(row) for row in positive_rows[:2])}")
             lines.append("")
-        lines.append("## Top Investigation Targets")
-        lines.append("")
-        lines.append("See the focused target cards in **Where Should I Start?**. Inventory-heavy target details are kept lower in the report.")
-        lines.append("")
-
     campaigns = context.get("investigation_campaigns", [])
     if campaigns:
         lines.append("## Top Investigation Campaigns")
         lines.append("")
         for index, item in enumerate(campaigns[:5], start=1):
-            evidence = "; ".join(str(row) for row in item.get("evidence_summary", [])[:4]) if isinstance(item.get("evidence_summary"), list) else ""
+            evidence = "; ".join(str(row) for row in item.get("evidence_summary", [])[:3]) if isinstance(item.get("evidence_summary"), list) else ""
             positives = "; ".join(str(row) for row in item.get("positive_validation_signals", [])[:3]) if isinstance(item.get("positive_validation_signals"), list) else ""
             top_targets = "; ".join(str(row) for row in item.get("top_targets", [])[:3]) if isinstance(item.get("top_targets"), list) else ""
             lines.append(f"### {index}. {item.get('name', '')}")
             lines.append("")
             lines.append(f"- Why this campaign: {item.get('priority_reason', 'Related attack surface cluster')}")
-            lines.append(f"- Confidence: {item.get('confidence', 'Low')} (average {item.get('average_confidence', 'Low')}); validation: {item.get('validation_strength', 'None')}")
-            lines.append(f"- Test strategy: {item.get('suggested_testing_strategy', 'Manual testing')}")
+            lines.append(f"- Likely weakness: {item.get('likely_weakness', 'Access control or exposure weakness')}")
+            lines.append(f"- Test first: {item.get('suggested_testing_strategy', 'Manual testing')}")
+            lines.append(f"- Confidence: {item.get('confidence', 'Low')}; validation: {item.get('validation_strength', 'None')}")
             if top_targets:
                 lines.append(f"- Top targets: {top_targets}")
             if evidence:
-                lines.append(f"- Evidence: {evidence}")
+                lines.append(f"- Evidence summary: {evidence}")
             if positives:
                 lines.append(f"- Confirming signals: {positives}")
             lines.append("")
         lines.append("")
+
+    next_targets = context.get("next_investigation_targets", [])
+    if len(next_targets) > 1:
+        lines.append("## Additional Opportunities")
+        lines.append("")
+        lines.append("The primary lead is already shown in **Where Should I Start?**. These are secondary options, not a separate priority system.")
+        lines.append("")
+        for index, item in enumerate(next_targets[1:5], start=2):
+            lines.append(f"### {index}. {item.get('target', '')}")
+            lines.append("")
+            lines.append(f"- Why investigate: {item.get('reason', 'Focused manual review target')}")
+            lines.append(f"- Test first: {item.get('suggested_testing', 'Manual verification')}")
+            lines.append(f"- Confidence: {item.get('confidence', 'Low')}; validation: {item.get('validation_strength', 'None')}")
+            lines.append("")
 
     perf = context.get("performance", {})
     lines.append("## Performance Analytics")
@@ -1171,6 +1253,25 @@ def _render_markdown(context: dict, out_md: Path) -> None:
     distribution = surface.get("technology_distribution", {})
     lines.append("## Technology Overview")
     lines.append("")
+    attack_tech = surface.get("attack_surface_technologies", [])
+    infra_tech = surface.get("infrastructure_technologies", [])
+    if attack_tech:
+        lines.append("### Attack-Surface Technologies")
+        lines.append("")
+        for item in attack_tech[:8]:
+            roles = ", ".join(item.get("roles", []))
+            lines.append(f"- {item.get('name')} ({roles or 'technology'}): {item.get('count', 0)} observed")
+        lines.append("")
+    else:
+        lines.append("- No attack-surface technologies were confidently identified. Infrastructure detections are kept as supporting context below.")
+        lines.append("")
+    if infra_tech:
+        lines.append("### Supporting Infrastructure Technologies")
+        lines.append("")
+        for item in infra_tech[:8]:
+            roles = ", ".join(item.get("roles", []))
+            lines.append(f"- {item.get('name')} ({roles or 'infrastructure'}): {item.get('count', 0)} observed")
+        lines.append("")
 
     risk_score = context.get("risk_score", {})
     infrastructure = context.get("infrastructure", {})
@@ -1210,6 +1311,8 @@ def _render_markdown(context: dict, out_md: Path) -> None:
         lines.append(f"- Historical JS endpoints: {historical_js.get('endpoints', 0)}")
     lines.append("")
     if distribution:
+        lines.append("### Supporting Technology Evidence")
+        lines.append("")
         for tech, count in distribution.items():
             roles = ", ".join(surface.get("technology_roles", {}).get(tech, []))
             suffix = f" ({roles})" if roles else ""
@@ -1231,7 +1334,11 @@ def _render_markdown(context: dict, out_md: Path) -> None:
     lines.append("## Subdomains")
     lines.append("")
     alive_names = set(context.get('alive_hostnames', []))
-    for s in context.get('subdomains', []):
+    subdomains = context.get('subdomains', [])
+    lines.append(f"- Total subdomains: {len(subdomains)}")
+    if len(subdomains) > 20:
+        lines.append("- Showing the first 20 for report readability. Full inventory remains in `subdomains/subdomains.*` artifacts.")
+    for s in subdomains[:20]:
         status = "alive" if s.lower() in alive_names else "unknown"
         lines.append(f"- {s} - {status}")
     lines.append("")
@@ -1258,11 +1365,13 @@ def _render_markdown(context: dict, out_md: Path) -> None:
     lines.append(f"- Historical JS endpoints: {len(historical_js_data.get('endpoints', [])) if isinstance(historical_js_data, dict) else 0}")
     lines.append("")
     if isinstance(asset_priority, dict) and asset_priority.get("top_assets"):
-        lines.append("### Top Priority Assets")
+        lines.append("### Supporting Priority Asset Inventory")
+        lines.append("")
+        lines.append("These assets support the start-here queue above; they are not a separate priority list.")
         lines.append("")
         lines.append("| Asset | Score | Confidence | Strongest Factors |")
         lines.append("| --- | --- | --- | --- |")
-        for item in asset_priority.get("top_assets", [])[:10]:
+        for item in asset_priority.get("top_assets", [])[:5]:
             if not isinstance(item, dict):
                 continue
             strongest = item.get("strongest_factors") if isinstance(item.get("strongest_factors"), list) else []
@@ -1295,19 +1404,31 @@ def _render_markdown(context: dict, out_md: Path) -> None:
 
     lines.append("## JavaScript Files")
     lines.append("")
-    for item in context.get("js_files", []):
+    js_inventory = context.get("js_files", [])
+    lines.append(f"- Total JavaScript files: {len(js_inventory)}")
+    if len(js_inventory) > 20:
+        lines.append("- Showing the first 20 for report readability. Full inventory remains in `javascript/js_files.*` artifacts.")
+    for item in js_inventory[:20]:
         lines.append(f"- {item.get('url')}")
     lines.append("")
 
     lines.append("## Endpoints")
     lines.append("")
-    for item in context.get("endpoints", []):
+    endpoint_inventory = context.get("endpoints", [])
+    lines.append(f"- Total endpoint candidates: {len(endpoint_inventory)}")
+    if len(endpoint_inventory) > 30:
+        lines.append("- Showing the first 30 for report readability. Full inventory remains in `endpoints/endpoints.*` artifacts.")
+    for item in endpoint_inventory[:30]:
         lines.append(f"- {item.get('endpoint')}")
     lines.append("")
 
     lines.append("## Secrets Detected")
     lines.append("")
-    for item in context.get("secrets", []):
+    secret_inventory = context.get("secrets", [])
+    lines.append(f"- Total secret pattern matches: {len(secret_inventory)}")
+    if len(secret_inventory) > 20:
+        lines.append("- Showing the first 20 for report readability. Full inventory remains in `secrets/secrets.*` artifacts.")
+    for item in secret_inventory[:20]:
         lines.append(
             f"- **{item.get('type')}** [{item.get('confidence', 'LOW')}] "
             f"{item.get('value_preview', '')} in {item.get('source')} "

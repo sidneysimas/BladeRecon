@@ -1,26 +1,49 @@
 # BladeRecon Installation Guide
 
-This guide prepares a local BladeRecon v0.2.0 RC environment.
+This guide prepares BladeRecon v0.2.1 for public-testing use.
 
-## Requirements
+## Recommended Install
 
-- Python 3.8 or newer
-- pip
-- Git
-- Optional: Go for Nuclei
-- Optional: Playwright Chromium for screenshots
-- Optional: Docker Desktop for container usage
+Use `pipx` for the cleanest end-user installation. It keeps BladeRecon isolated
+from your system Python while registering the `bladerecon` command globally.
 
-## Windows Installation
+```bash
+pipx install bladerecon
+bladerecon doctor
+```
 
-Open PowerShell in the project directory:
+If `pipx` is not installed:
+
+```bash
+python -m pip install --user pipx
+python -m pipx ensurepath
+```
+
+Restart the terminal if your shell cannot find `pipx` or `bladerecon`.
+
+## Alternative Install
+
+Use a virtual environment when `pipx` is not available:
+
+```bash
+python -m venv .venv
+```
+
+Windows PowerShell:
 
 ```powershell
-python --version
-python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
-python -m pip install .
+python -m pip install bladerecon
+bladerecon doctor
+```
+
+Linux, macOS, and WSL:
+
+```bash
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install bladerecon
 bladerecon doctor
 ```
 
@@ -31,130 +54,84 @@ Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 .\.venv\Scripts\Activate.ps1
 ```
 
-## Python Requirements
+## First Scan
 
-BladeRecon is packaged through `pyproject.toml`.
-
-Install from source:
+Run a conservative first scan:
 
 ```bash
-python -m pip install .
+bladerecon doctor
+bladerecon full example.com --profile safe
+bladerecon report example.com
 ```
 
-Install editable for development:
+`bladerecon scan example.com --profile safe` is accepted as an alias for
+`bladerecon full example.com --profile safe`.
 
-```bash
-python -m pip install -e .
-```
-
-Install test/build tools if needed:
-
-```bash
-python -m pip install pytest build wheel
-```
-
-## Go Installation
-
-Nuclei is distributed as a Go binary.
-
-Windows:
-
-1. Install Go from https://go.dev/dl/
-2. Restart the terminal.
-3. Verify:
-
-```powershell
-go version
-```
-
-Linux:
-
-```bash
-sudo apt update
-sudo apt install -y golang-go
-go version
-```
-
-## Nuclei Installation
-
-Install Nuclei:
-
-```bash
-go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest
-```
-
-Ensure Go bin is in PATH.
-
-Windows usually uses:
+Reports are written to:
 
 ```text
-%USERPROFILE%\go\bin
+results/example.com/reports/report.html
+results/example.com/reports/report.md
 ```
 
-Verify:
+## Optional External Tools
+
+BladeRecon works without optional tools, but some modules will be skipped.
+`bladerecon doctor` explains what is available.
+
+Install helper:
 
 ```bash
-nuclei -version
-bladerecon doctor
+bladerecon install-deps
 ```
 
-The first install can take several minutes while Go downloads and compiles dependencies. `bladerecon install-deps` shows progress messages while this is happening.
-
-If Nuclei is not installed, BladeRecon skips Nuclei scans gracefully.
-
-## Playwright And Chromium Installation
-
-BladeRecon uses Playwright only for screenshots.
-
-Install Chromium:
+Screenshot support requires Playwright Chromium:
 
 ```bash
 python -m playwright install chromium
 ```
 
-Verify:
+Nuclei support requires the Nuclei binary and templates. On Windows,
+`bladerecon install-deps` installs the prebuilt Nuclei v3 binary. On Linux,
+macOS, and WSL, it uses the Go install workflow when Go is available.
+
+Manual Nuclei install:
 
 ```bash
+go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest
+nuclei -version
 bladerecon doctor
 ```
 
-If Chromium is missing, screenshots are skipped and the full workflow continues.
+If Nuclei is not installed, BladeRecon skips Nuclei scans gracefully.
 
-## Verification Steps
+## Source Install For Development
 
 ```bash
-bladerecon --help
-bladerecon --version
+git clone https://github.com/mohamedxk9tb/BladeRecon.git
+cd BladeRecon
+python -m venv .venv
+```
+
+Windows:
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -e .
 bladerecon doctor
-bladerecon cache info
 ```
 
-Run a small scan:
+Linux, macOS, and WSL:
 
 ```bash
-bladerecon subdomain example.com
-bladerecon probe example.com --profile safe
-bladerecon intelligence example.com
-bladerecon advanced example.com --profile safe
-bladerecon report example.com
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -e .
+bladerecon doctor
 ```
 
-Generated reports include offline HTML/Markdown output plus scan performance
-analytics when produced by `bladerecon full`. The HTML report uses the dark
-theme by default and shows the active safety profile.
-
-## Safety Profile Defaults
-
-BladeRecon defaults to `balanced`. Use `--profile safe` for bug bounty programs
-or rate-sensitive targets. `--profile aggressive` is explicit opt-in for faster
-scans and higher request ceilings.
-
-```bash
-bladerecon full example.com --profile safe
-bladerecon nuclei example.com --profile safe --timeout 900
-```
-
-## Docker Installation
+## Docker
 
 Build:
 
@@ -171,29 +148,35 @@ docker run --rm bladerecon doctor
 Persist results:
 
 ```bash
-docker run --rm -v "%cd%\results:/app/results" bladerecon full example.com
+docker run --rm -v "%cd%\results:/app/results" bladerecon full example.com --profile safe
 ```
 
 PowerShell can also use:
 
 ```powershell
-docker run --rm -v "${PWD}\results:/app/results" bladerecon full example.com
+docker run --rm -v "${PWD}\results:/app/results" bladerecon full example.com --profile safe
 ```
 
-## Release Validation
+## Verification
 
-For maintainers:
+```bash
+bladerecon --help
+bladerecon --version
+bladerecon doctor
+bladerecon cache info
+```
+
+Expected release artifacts for maintainers:
+
+```text
+dist/bladerecon-0.2.1-py3-none-any.whl
+dist/bladerecon-0.2.1.tar.gz
+```
+
+Maintainer validation:
 
 ```bash
 python -m pytest
-python -m compileall bladerecon tests
+python -m compileall bladerecon
 python -m build
-bladerecon doctor
-```
-
-Expected artifacts:
-
-```text
-dist/bladerecon-0.2.0-py3-none-any.whl
-dist/bladerecon-0.2.0.tar.gz
 ```

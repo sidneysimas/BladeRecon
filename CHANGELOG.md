@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.2.1 - 2026-06-05
+
+- Added a discoverable `bladerecon scan` alias for the standard full workflow and surfaced a Start Here path in root help for first-time users.
+- Modernized installation documentation for PyPI/pipx users, corrected stale v0.2.0 artifact references, and added contribution guidance for public testing.
+- Tightened Nuclei tag-fallback behavior so failed intelligence tags cannot fall through into an unjustified baseline-only scan without passing the ROI gate.
+- Refined opportunity scoring so weakly validated or historical-only leads cannot inflate the Research Opportunity Score into a perfect/high-confidence signal.
+- Prevented campaign clustering from inferring Authentication Surface campaigns from generic authorization-testing guidance.
+- Capped campaign confidence when validation is weak or absent so campaigns read like investigation plans instead of inflated clusters.
+- Kept concrete GraphQL plus administrative attack paths eligible for Critical Investigation when current endpoint evidence supports them.
+- Hardened report architecture for release readiness: one canonical start-here queue, campaign cards as testing plans, secondary leads renamed to additional opportunities, priority assets demoted to supporting inventory, and technology evidence split into attack-surface versus infrastructure context.
+- Reduced report duplication by keeping the primary recommendation in Where Should I Start and moving additional target detail lower in the report.
+- Updated package metadata to v0.2.1 and modernized the MIT license declaration for clean builds with current setuptools.
+
 ## 0.2.0 - 2026-05-29
 
 - Added Advanced Recon intelligence with historical URL collection, historical endpoint/parameter extraction, historical attack-surface correlation, historical JavaScript analysis, low-noise content discovery, security-header asset discovery, and asset prioritization.

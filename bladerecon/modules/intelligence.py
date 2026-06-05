@@ -145,13 +145,11 @@ class HostOpportunity:
             score_cap = min(score_cap, 60)
         capped_score = min(self.score + correlation_strength * 8, score_cap)
         adjusted_score = max(0, min(100, capped_score - self.noise_penalty))
-        priority = "Critical Investigation" if adjusted_score >= 85 else "High Investigation" if adjusted_score >= 65 else "Focused Review"
-        return {
+        row = {
             "host": self.host,
             "opportunity_type": opportunity,
             "opportunity_types": sorted(self.opportunity_types),
             "score": adjusted_score,
-            "priority": priority,
             "confidence": confidence,
             "indicator_count": indicator_count,
             "evidence_diversity": evidence_diversity,
@@ -161,6 +159,8 @@ class HostOpportunity:
             "priority_reason": _priority_reason(self, strongest),
             "suggested_testing": _suggested_testing(self.opportunity_types),
         }
+        row.update(_priority_label(adjusted_score, confidence, row))
+        return row
 
 
 def _read_json(path: Path, default: Any) -> Any:
@@ -672,6 +672,31 @@ def _validation_strength(score: int) -> str:
     return "None"
 
 
+def _priority_label(score: int, confidence: str, row: Dict[str, Any]) -> Dict[str, str]:
+    validation = str(row.get("validation_strength") or "None")
+    if (
+        score >= 85
+        and validation in {"Strong", "Moderate"}
+        and confidence in {"High", "Very High"}
+    ) or (
+        score >= 95
+        and validation == "Weak"
+        and confidence == "Very High"
+        and "Historical-only" not in str(row.get("priority_reason") or "")
+    ) or (
+        score >= 85
+        and validation == "Weak"
+        and confidence in {"High", "Very High"}
+        and {"GraphQL", "Admin"}.issubset(set(row.get("opportunity_types") or []))
+    ):
+        priority = "Critical Investigation"
+    elif score >= 65 or (score >= 55 and validation in {"Strong", "Moderate"}):
+        priority = "High Investigation"
+    else:
+        priority = "Focused Review"
+    return {"priority": priority}
+
+
 def _opportunity_validation(opportunity: HostOpportunity, row: Dict[str, Any], scan_data: Dict[str, Any], noisy_hosts: Set[str]) -> Dict[str, Any]:
     host = opportunity.host
     types = opportunity.opportunity_types
@@ -972,6 +997,7 @@ def build_opportunity_priorities(scan_data: Dict[str, Any]) -> List[Dict[str, An
             continue
         row = item.to_report_row()
         row.update(_opportunity_validation(item, row, scan_data, noisy_hosts))
+        row.update(_priority_label(int(row.get("score") or 0), str(row.get("confidence") or "Low"), row))
         rows.append(row)
     rows.sort(key=lambda item: (-int(item["score"]), str(item["host"])))
     return rows[:20]

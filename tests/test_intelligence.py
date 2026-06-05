@@ -217,6 +217,28 @@ def test_historical_alive_endpoint_is_not_double_counted_as_removed_or_legacy():
     assert "Historical-only or legacy path needs live verification" not in top["negative_validation_signals"]
 
 
+def test_weak_validation_prevents_critical_priority_label():
+    scan_data = {
+        "probe_rows": [{"url": "https://support.example.com", "alive": True, "cdn": "Cloudflare"}],
+        "endpoint_rows": [{"endpoint": "https://support.example.com/api/_/support/ticket/custom_objects/search?term="}],
+        "content_discovery_rows": [],
+        "historical_endpoints": [{"endpoint": "https://support.example.com/api/_/support/ticket/custom_objects/search?term="}],
+        "historical_diff": {
+            "historical_and_currently_alive": ["https://support.example.com/assets/cdn/portal/scripts/login.js"],
+            "removed_apis": [],
+            "legacy_paths": [],
+        },
+        "parameters": [],
+        "nuclei_rows": [],
+    }
+
+    top = intelligence.build_opportunity_priorities(scan_data)[0]
+
+    assert top["score"] >= 85
+    assert top["validation_strength"] == "Weak"
+    assert top["priority"] == "High Investigation"
+
+
 def test_single_keyword_does_not_outrank_correlated_opportunity():
     scan_data = {
         "probe_rows": [{"url": "https://admin.example.com"}],

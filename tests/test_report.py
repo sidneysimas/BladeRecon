@@ -66,6 +66,73 @@ def test_investigation_campaigns_group_api_opportunities_without_noise() -> None
     assert not any(item["name"] == "Infrastructure" for item in campaigns)
 
 
+def test_campaigns_do_not_infer_auth_from_generic_authorization_testing() -> None:
+    targets = [
+        {
+            "target": "support.example.com",
+            "type": "Historical",
+            "opportunity_types": ["API", "Historical"],
+            "score": 88,
+            "confidence": "High",
+            "validation_strength": "Weak",
+            "suggested_testing": "Legacy authorization checks; Endpoint authorization, IDOR testing",
+            "positive_validation_signals": ["API exposure confirmed by endpoint artifacts"],
+            "negative_validation_signals": ["No Nuclei validation findings for this host"],
+            "correlation_strength": 4,
+            "evidence_summary": ["API/OpenAPI exposure evidence", "Historical endpoint correlation"],
+            "evidence": [
+                {"type": "API", "value": "https://support.example.com/api/search", "source": "endpoint", "reason": "API endpoint discovered"},
+                {"type": "Historical", "value": "https://support.example.com/api/search", "source": "historical_endpoint", "reason": "Historical API endpoint observed"},
+            ],
+        }
+    ]
+
+    campaigns = report._build_investigation_campaigns(targets)
+
+    names = {item["name"] for item in campaigns}
+    assert "API Ecosystem" in names
+    assert "Historical Functionality" in names
+    assert "Authentication Surface" not in names
+    api_campaign = next(item for item in campaigns if item["name"] == "API Ecosystem")
+    assert api_campaign["confidence"] == "Medium"
+
+
+def test_research_opportunity_score_is_capped_when_top_lead_is_weakly_validated() -> None:
+    next_targets = [
+        {
+            "target": "support.example.com",
+            "score": 88,
+            "confidence": "High",
+            "validation_strength": "Weak",
+            "reason": "API endpoint plus historical evidence needs verification",
+        }
+    ]
+    campaigns = [{"name": "API Ecosystem"}, {"name": "Historical Functionality"}]
+
+    score = report._research_opportunity_score(next_targets, campaigns)
+
+    assert score["score"] == 85
+    assert score["level"] == "High"
+
+
+def test_research_opportunity_score_caps_historical_only_leads() -> None:
+    next_targets = [
+        {
+            "target": "api.example.com",
+            "score": 60,
+            "confidence": "Medium",
+            "validation_strength": "Weak",
+            "reason": "Historical-only endpoint evidence requires live verification before active testing.",
+        }
+    ]
+    campaigns = [{"name": "Historical Functionality"}, {"name": "API Ecosystem"}]
+
+    score = report._research_opportunity_score(next_targets, campaigns)
+
+    assert score["score"] == 65
+    assert score["level"] == "Medium"
+
+
 def test_report_rendering_with_minimal_outputs(tmp_path: Path) -> None:
     target = tmp_path / "example.com"
     (target / "subdomains").mkdir(parents=True)
@@ -243,10 +310,11 @@ def test_report_rendering_with_minimal_outputs(tmp_path: Path) -> None:
     assert "Technology Overview" in html
     assert "Recon Intelligence" in html
     assert "Advanced Recon Intelligence" in html
-    assert "Top Investigation Targets" in html
+    assert "Additional Opportunities" in html
     assert "Top Investigation Campaigns" in html
     assert "API Ecosystem" in html
     assert "Authorization testing, IDOR, version diffing" in html
+    assert "Likely weakness" in html
     assert "Critical Investigation" in html
     assert "Very High confidence" in html
     assert "Strong validation" in html
@@ -261,6 +329,8 @@ def test_report_rendering_with_minimal_outputs(tmp_path: Path) -> None:
     assert "Cloud Assets" in html
     assert "Smart Nuclei Summary" in html
     assert "Technologies Detected" in html
+    assert "Attack-Surface Technologies" in html
+    assert "Supporting infrastructure technologies" in html
     assert "Technology Categories" in html
     assert "Technology Evidence" in html
     assert "<th>Technology</th>" in html
@@ -302,8 +372,8 @@ def test_report_rendering_with_minimal_outputs(tmp_path: Path) -> None:
     assert "- HTTP Responses Recorded: 2" in md
     assert "### Top Slowest Modules" in md
     assert "### Top RAM Consumers" in md
-    assert "### Top Priority Assets" in md
-    assert "## Top Investigation Targets" in md
+    assert "### Supporting Priority Asset Inventory" in md
+    assert "## Additional Opportunities" in md
     assert "## Top Investigation Campaigns" in md
     assert "API Ecosystem" in md
     assert "Critical Investigation" in md

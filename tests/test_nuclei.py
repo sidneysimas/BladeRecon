@@ -327,6 +327,45 @@ def test_nuclei_skips_baseline_only_without_opportunity_evidence(tmp_path, monke
     assert (target / "nuclei" / "results.json").read_text(encoding="utf-8").strip() == "[]"
 
 
+def test_nuclei_tag_miss_fallback_respects_roi_gate(tmp_path, monkeypatch):
+    target = tmp_path / "example.com"
+    alive = target / "probe" / "alive.txt"
+    alive.parent.mkdir(parents=True)
+    alive.write_text("https://www.example.com\n", encoding="utf-8")
+    tech = target / "technology" / "technology.json"
+    tech.parent.mkdir()
+    tech.write_text(json.dumps([{"name": "Drupal", "hosts": ["www.example.com"], "confidence": "High"}]), encoding="utf-8")
+    (target / "intelligence").mkdir()
+    (target / "intelligence" / "template_intelligence.json").write_text('{"selected_tags":["drupal"]}', encoding="utf-8")
+    executed = {"value": False}
+
+    monkeypatch.setattr(nuclei, "_nuclei_exists", lambda: True)
+    monkeypatch.setattr(nuclei, "nuclei_template_status", lambda *args, **kwargs: {"ok": True, "path": str(tmp_path)})
+    monkeypatch.setattr(nuclei, "_count_matching_templates", lambda *args, **kwargs: 0)
+
+    def fake_config_get(config, key, default=None):
+        if key == "nuclei.count_templates_before_run":
+            return True
+        return default
+
+    monkeypatch.setattr(nuclei, "config_get", fake_config_get)
+
+    def fake_run(*args, **kwargs):
+        executed["value"] = True
+        return subprocess.CompletedProcess([], 0, "", "")
+
+    monkeypatch.setattr(nuclei, "_run_nuclei_process", fake_run)
+
+    result = nuclei.run(domain="example.com", output=tmp_path)
+
+    assert result.status == "skipped"
+    assert executed["value"] is False
+    metadata = json.loads((target / "nuclei" / "metadata.json").read_text(encoding="utf-8"))
+    assert metadata["coverage_strategy"] == "skipped_low_roi_baseline"
+    assert metadata["tag_fallback_reason"]
+    assert metadata["roi_decision"]["run"] is False
+
+
 def test_nuclei_roi_requires_high_confidence_not_score_only(tmp_path):
     target = tmp_path / "example.com" / "intelligence"
     target.mkdir(parents=True)

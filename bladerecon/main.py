@@ -66,6 +66,7 @@ from .modules.utils import (
 
 COMMAND_GROUPS = {
     "Recon": [
+        ("scan", "Start a standard full workflow (alias for full)"),
         ("subdomain", "Discover subdomains from multiple sources"),
         ("probe", "Probe alive hosts"),
         ("js", "Discover JavaScript assets"),
@@ -121,6 +122,12 @@ def _render_root_help(no_banner: bool = False) -> str:
         help_console.print()
     help_console.print("[white]Usage:[/] [cyan]bladerecon[/] [white][OPTIONS] COMMAND [ARGS]...[/]")
     help_console.print("[dim]Lightweight reconnaissance for attack-surface discovery.[/]")
+    help_console.print()
+    help_console.print("[cyan]Start Here[/]")
+    help_console.print("  [white]bladerecon doctor[/]")
+    help_console.print("  [white]bladerecon full example.com --profile safe[/]")
+    help_console.print("  [white]bladerecon report example.com[/]")
+    help_console.print("[dim]Tip: `bladerecon scan` is an alias for `bladerecon full`.[/]")
     help_console.print()
 
     for group_name, commands in COMMAND_GROUPS.items():
@@ -1140,6 +1147,37 @@ def full(
     _print_slowest_modules(domain, output)
     print_scan_summary(_collect_summary(domain, output, f"{duration:.2f}s"))
     success("Full run completed")
+
+
+@app.command("scan")
+def scan(
+    domain: str = typer.Argument(..., help="Target domain, e.g. example.com"),
+    output: Path = typer.Option(Path("results"), "-o", "--output"),
+    all: bool = typer.Option(True, "--all/--no-all", help="Run all modules (default: True)"),
+    report: bool = typer.Option(True, "--report/--no-report", help="Generate report after full run (default: True)"),
+    resume_mode: bool = typer.Option(False, "--resume", help="Skip completed modules from scan_state.json"),
+    proxy: Optional[str] = typer.Option(None, "--proxy", help="HTTP/HTTPS/SOCKS5 proxy for HTTP-based modules"),
+    user_agent: Optional[str] = typer.Option(None, "--user-agent", help="Custom User-Agent"),
+    random_user_agent: bool = typer.Option(False, "--random-user-agent", help="Use a randomized built-in User-Agent"),
+    profile: str = typer.Option("balanced", "--profile", help="Safety profile: safe, balanced, aggressive"),
+) -> None:
+    """Start the standard recon workflow.
+
+    Alias for `full`, because first-time users naturally try
+    `bladerecon scan target.com`.
+    """
+    warn("`scan` is an alias for `full`; running the standard workflow.")
+    full(
+        domain=domain,
+        output=output,
+        all=all,
+        report=report,
+        resume_mode=resume_mode,
+        proxy=proxy,
+        user_agent=user_agent,
+        random_user_agent=random_user_agent,
+        profile=profile,
+    )
 
 
 @app.command()

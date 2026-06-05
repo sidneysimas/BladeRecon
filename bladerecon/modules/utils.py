@@ -47,7 +47,7 @@ F = TypeVar("F", bound=Callable[..., Any])
 PROJECT_NAME = "BladeRecon"
 AUTHOR = "Mohamed Kotb"
 GITHUB = "github.com/mohamedxk9tb"
-BUILD_DATE = "2026-05-29"
+BUILD_DATE = "2026-06-05"
 CACHE_DIRNAME = ".cache"
 HEALTH_OK = "OK"
 HEALTH_WARN = "WARN"

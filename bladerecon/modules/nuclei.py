@@ -1149,6 +1149,76 @@ def run(
         if automatic_scan and "-as" not in cmd:
             cmd += ["-as"]
         selection_reason = "intelligence tags unavailable; fallback to automatic scan" if automatic_scan else "intelligence tags unavailable; fallback to baseline-only" if baseline_only else f"intelligence tags unavailable; fallback to profile {profile}"
+        if roi_gate_enabled and baseline_only:
+            roi_decision = _nuclei_roi_decision(
+                output,
+                target_name,
+                baseline_only=True,
+                selected_tags=[],
+                explicit_templates=explicit_templates,
+                automatic_scan=automatic_scan,
+            )
+            if not bool(roi_decision.get("run", True)):
+                duration = time.perf_counter() - started
+                reason = str(roi_decision.get("reason") or "baseline-only scan skipped: insufficient opportunity evidence after tag fallback")
+                metadata = {
+                    "profile": profile,
+                    "status": "skipped",
+                    "skip_reason": reason,
+                    "severity": resolved_severity,
+                    "exclude_tags": resolved_exclude_tags,
+                    "automatic_scan": automatic_scan,
+                    "baseline_only": baseline_only,
+                    "detected_technologies": detected_technologies,
+                    "template_intelligence": template_intelligence,
+                    "selected_tags_requested": selected_tags_requested,
+                    "selected_tags": selected_tags,
+                    "selection_reason": selection_reason,
+                    "coverage_strategy": "skipped_low_roi_baseline",
+                    "tag_fallback_reason": tag_fallback_reason,
+                    "roi_decision": roi_decision,
+                    "baseline_reason": reason,
+                    "baseline_skip_reason": reason,
+                    "baseline_roi": {"run": False, "reason": reason, "targets": []},
+                    "baseline_targets": [],
+                    "target_scope": target_scope,
+                    "template_candidates": None,
+                    "template_count_preflight": count_templates_before_run,
+                    "templates_executed": 0,
+                    "templates_skipped": None,
+                    "baseline_scan": {
+                        "enabled": baseline_enabled,
+                        "applied": False,
+                        "status": "skipped",
+                        "reason": reason,
+                        "skip_reason": reason,
+                        "roi": {"run": False, "reason": reason, "targets": []},
+                        "targets": [],
+                        "severity": baseline_severity,
+                        "tags": baseline_tags,
+                        "max_targets": baseline_max_targets,
+                        "template_candidates": None,
+                        "templates_executed": 0,
+                        "targets_count": 0,
+                        "duration_seconds": 0.0,
+                    },
+                    "targets_count": target_count,
+                    "target_ceiling": target_ceiling,
+                    "rate_limit": resolved_rate,
+                    "concurrency": resolved_concurrency,
+                    "request_timeout": config_get(config, "nuclei.request_timeout", 8),
+                    "retries": config_get(config, "nuclei.retries", 0),
+                    "module_timeout": module_timeout,
+                    "enforce_module_timeout": enforce_module_timeout,
+                    "duration_seconds": round(duration, 2),
+                    "findings_count": 0,
+                    "targets": target_name,
+                    "command": cmd,
+                }
+                _write_nuclei_skip_artifacts(out_dir, metadata)
+                skip("Nuclei module skipped")
+                info(f"Reason: {reason}")
+                return skipped_result(reason)
         template_candidates = _count_matching_templates(cmd, timeout=min(module_timeout or 60, 60)) if count_templates_before_run else None
         baseline_needed = False
         baseline_reason = "tag fallback disabled baseline"
@@ -1225,6 +1295,76 @@ def run(
             if automatic_scan and "-as" not in cmd:
                 cmd += ["-as"]
             selection_reason = "intelligence tags failed; fallback to automatic scan" if automatic_scan else "intelligence tags failed; fallback to baseline-only" if baseline_only else f"intelligence tags failed; fallback to profile {profile}"
+            if roi_gate_enabled and baseline_only:
+                roi_decision = _nuclei_roi_decision(
+                    output,
+                    target_name,
+                    baseline_only=True,
+                    selected_tags=[],
+                    explicit_templates=explicit_templates,
+                    automatic_scan=automatic_scan,
+                )
+                if not bool(roi_decision.get("run", True)):
+                    duration = time.perf_counter() - started
+                    reason = str(roi_decision.get("reason") or "baseline-only scan skipped: insufficient opportunity evidence after tag runtime failure")
+                    metadata = {
+                        "profile": profile,
+                        "status": "skipped",
+                        "skip_reason": reason,
+                        "severity": resolved_severity,
+                        "exclude_tags": resolved_exclude_tags,
+                        "automatic_scan": automatic_scan,
+                        "baseline_only": baseline_only,
+                        "detected_technologies": detected_technologies,
+                        "template_intelligence": template_intelligence,
+                        "selected_tags_requested": selected_tags_requested,
+                        "selected_tags": selected_tags,
+                        "selection_reason": selection_reason,
+                        "coverage_strategy": "skipped_low_roi_baseline",
+                        "tag_fallback_reason": tag_fallback_reason,
+                        "roi_decision": roi_decision,
+                        "baseline_reason": reason,
+                        "baseline_skip_reason": reason,
+                        "baseline_roi": {"run": False, "reason": reason, "targets": []},
+                        "baseline_targets": [],
+                        "target_scope": target_scope,
+                        "template_candidates": template_candidates,
+                        "template_count_preflight": count_templates_before_run,
+                        "templates_executed": 0,
+                        "templates_skipped": None,
+                        "baseline_scan": {
+                            "enabled": baseline_enabled,
+                            "applied": False,
+                            "status": "skipped",
+                            "reason": reason,
+                            "skip_reason": reason,
+                            "roi": {"run": False, "reason": reason, "targets": []},
+                            "targets": [],
+                            "severity": baseline_severity,
+                            "tags": baseline_tags,
+                            "max_targets": baseline_max_targets,
+                            "template_candidates": None,
+                            "templates_executed": 0,
+                            "targets_count": 0,
+                            "duration_seconds": 0.0,
+                        },
+                        "targets_count": target_count,
+                        "target_ceiling": target_ceiling,
+                        "rate_limit": resolved_rate,
+                        "concurrency": resolved_concurrency,
+                        "request_timeout": config_get(config, "nuclei.request_timeout", 8),
+                        "retries": config_get(config, "nuclei.retries", 0),
+                        "module_timeout": module_timeout,
+                        "enforce_module_timeout": enforce_module_timeout,
+                        "duration_seconds": round(duration, 2),
+                        "findings_count": 0,
+                        "targets": target_name,
+                        "command": cmd,
+                    }
+                    _write_nuclei_skip_artifacts(out_dir, metadata)
+                    skip("Nuclei module skipped")
+                    info(f"Reason: {reason}")
+                    return skipped_result(reason)
             template_candidates = _count_matching_templates(cmd, timeout=min(module_timeout or 60, 60)) if count_templates_before_run else None
             baseline_needed = False
             with log_duration(log, "nuclei tag fallback retry"):

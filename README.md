@@ -1,9 +1,9 @@
 # BladeRecon
 
-![BladeRecon banner](assets/banner.png)
+![BladeRecon banner](https://raw.githubusercontent.com/mohamedxk9tb/BladeRecon/main/assets/banner.png)
 
 ![Python](https://img.shields.io/badge/python-3.8%2B-blue)
-![Version](https://img.shields.io/badge/version-0.2.0-cyan)
+![Version](https://img.shields.io/badge/version-0.2.1-cyan)
 ![CLI](https://img.shields.io/badge/interface-Rich%20CLI-0f766e)
 ![Reports](https://img.shields.io/badge/reports-HTML%20%2B%20Markdown-4b5563)
 ![License](https://img.shields.io/badge/license-MIT-green)
@@ -32,7 +32,7 @@ It is not intended to replace Amass, distributed recon stacks, or enterprise sca
 
 ### CLI Preview
 
-![BladeRecon CLI preview](assets/cli-preview.png)
+![BladeRecon CLI preview](https://raw.githubusercontent.com/mohamedxk9tb/BladeRecon/main/assets/cli-preview.png)
 
 The CLI preview demonstrates the terminal-first workflow: branded startup,
 module status output, dependency checks, and scan summaries. This matters
@@ -43,12 +43,13 @@ Data policy: sanitized `example.com` target, no fake findings, no sensitive data
 
 ### Report Preview
 
-![BladeRecon report preview](assets/report-preview.png)
+![BladeRecon report preview](https://raw.githubusercontent.com/mohamedxk9tb/BladeRecon/main/assets/report-preview.png)
 
-The report preview demonstrates the dark offline report, including risk context,
-intelligence summaries, infrastructure evidence, findings status, and
-performance analytics. This matters because BladeRecon's output is meant to help
-researchers prioritize follow-up work, not just count discovered artifacts.
+The report preview demonstrates the dark offline report, including a decision
+dashboard, start-here investigation queue, campaign test plans, supporting
+evidence, findings status, and performance analytics. This matters because
+BladeRecon's output is meant to help researchers prioritize follow-up work, not
+just count discovered artifacts.
 
 Data policy: sanitized sample data with zero fake findings.
 
@@ -66,7 +67,7 @@ Data policy: sanitized sample data with zero fake findings.
 | Intelligence | Technology, infrastructure, cloud asset, risk, and template-selection context |
 | Advanced Recon | Historical URLs, historical JS, low-noise content discovery, security-header assets, and explainable asset prioritization |
 | Nuclei | Optional Nuclei wrapper with safe, balanced, aggressive, intelligence-guided profiles, ROI gating, and a lightweight baseline safety net when justified |
-| Reports | Dark-theme offline HTML and Markdown reports with a Where Should I Start dashboard, separated research/risk scoring, section search, exports, intelligence summaries, priority reasons, and performance analytics |
+| Reports | Dark-theme offline HTML and Markdown reports with an executive dashboard, a single Where Should I Start queue, campaign test plans, separated research/risk scoring, section search, exports, and performance analytics |
 | Safety | Safety profiles, request ceilings, per-host concurrency, rate limits, and Nuclei timeout reporting |
 | Utilities | Doctor, repair, cache management, resume state, and install helper |
 
@@ -91,7 +92,21 @@ Data policy: sanitized sample data with zero fake findings.
 
 See [INSTALL](INSTALL.md) for complete Windows, Python, Go, Nuclei, Playwright, Docker, and verification instructions.
 
-From source:
+Recommended install:
+
+```bash
+pipx install bladerecon
+bladerecon doctor
+```
+
+Alternative install:
+
+```bash
+python -m pip install bladerecon
+bladerecon doctor
+```
+
+Development install from source:
 
 ```bash
 git clone https://github.com/mohamedxk9tb/BladeRecon.git
@@ -113,6 +128,17 @@ python -m playwright install chromium
 BladeRecon installs Nuclei from the v3 release line when using `install-deps`.
 
 ## Quick Examples
+
+Start here on a fresh install:
+
+```bash
+bladerecon doctor
+bladerecon full example.com --profile safe
+bladerecon report example.com
+```
+
+`bladerecon scan example.com --profile safe` is also accepted as a first-user
+alias for `bladerecon full`.
 
 ```bash
 bladerecon --help
@@ -344,7 +370,7 @@ on future scans.
 - Keep README and social media assets current for release candidates
 - Expand test coverage for real-world edge cases
 - Keep optional dependencies graceful and transparent
-- Prepare `v0.2.0` for public Release Candidate evaluation
+- Prepare `v0.2.1` for public Release Candidate evaluation
 
 ## Documentation
 

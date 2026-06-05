@@ -278,7 +278,7 @@
           <a href="#where-start"><span class="nav-icon">&#9733;</span> Start</a>
           <a href="#executive-summary"><span class="nav-icon">&#9632;</span> Summary</a>
           <a href="#top-investigation-campaigns"><span class="nav-icon">&#9670;</span> Campaigns</a>
-          <a href="#top-investigation-targets"><span class="nav-icon">?</span> Targets</a>
+          <a href="#additional-opportunities"><span class="nav-icon">?</span> More Leads</a>
           <a href="#subdomains"><span class="nav-icon">&#9711;</span> Subdomains</a>
           <a href="#javascript"><span class="nav-icon">{ }</span> JavaScript</a>
           <a href="#endpoints"><span class="nav-icon">&#8599;</span> Endpoints</a>
@@ -334,6 +334,45 @@
             <button class="btn" id="copySummary" type="button">Copy Summary</button>
           </div>
         </div>
+
+        <section class="section" id="executive-summary">
+          <div class="section-head">
+            <div>
+              <h2>Executive Summary</h2>
+              <small>Decision dashboard for scan outcome and next action</small>
+            </div>
+          </div>
+          <div class="exec-dashboard">
+            <div class="card exec-card primary">
+              <div>
+                <span class="label">Opportunity Level</span>
+                <span class="exec-value">{{ research_opportunity_score.get("score", 0) }}/100</span>
+              </div>
+              <div class="exec-note">{{ research_opportunity_score.get("level", "No Clear Lead") }} - use the start-here queue before inventory.</div>
+            </div>
+            <div class="card exec-card">
+              <div>
+                <span class="label">Attack Surface</span>
+                <span class="exec-value">{{ alive_count }}</span>
+              </div>
+              <div class="exec-note">{{ attack_surface.total_assets }} total assets, {{ endpoints | length }} endpoint{{ "" if endpoints | length == 1 else "s" }}, {{ js_files | length }} JS file{{ "" if js_files | length == 1 else "s" }}.</div>
+            </div>
+            <div class="card exec-card">
+              <div>
+                <span class="label">Nuclei Outcome</span>
+                <span class="exec-value {% if nuclei_skipped_reason %}status-number{% endif %}">{% if nuclei_skipped_reason %}{{ nuclei_status_label }}{% else %}{{ nuclei_count }}{% endif %}</span>
+              </div>
+              <div class="exec-note">{% if nuclei_skipped_reason %}Skipped by ROI/runtime state. See details below.{% elif nuclei_count == 0 %}Completed with zero findings.{% else %}Finding count from executed templates.{% endif %}</div>
+            </div>
+            <div class="card exec-card">
+              <div>
+                <span class="label">Scan Outcome</span>
+                <span class="exec-value">{{ scan_duration }}</span>
+              </div>
+              <div class="exec-note">{{ screenshots_status }} screenshots; {{ parameters_status }} parameters; Program Risk {% if risk_score %}{{ risk_score.get("score", 0) }}/100{% else %}not scored{% endif %}.</div>
+            </div>
+          </div>
+        </section>
 
         {% if next_investigation_targets %}
         <section class="section card" id="where-start">
@@ -398,45 +437,6 @@
         </section>
         {% endif %}
 
-        <section class="section" id="executive-summary">
-          <div class="section-head">
-            <div>
-              <h2>Executive Summary</h2>
-              <small>Decision dashboard for scan outcome and next action</small>
-            </div>
-          </div>
-          <div class="exec-dashboard">
-            <div class="card exec-card primary">
-              <div>
-                <span class="label">Opportunity Level</span>
-                <span class="exec-value">{{ research_opportunity_score.get("score", 0) }}/100</span>
-              </div>
-              <div class="exec-note">{{ research_opportunity_score.get("level", "No Clear Lead") }} - use the start-here queue before inventory.</div>
-            </div>
-            <div class="card exec-card">
-              <div>
-                <span class="label">Attack Surface</span>
-                <span class="exec-value">{{ alive_count }}</span>
-              </div>
-              <div class="exec-note">{{ attack_surface.total_assets }} total assets, {{ endpoints | length }} endpoint{{ "" if endpoints | length == 1 else "s" }}, {{ js_files | length }} JS file{{ "" if js_files | length == 1 else "s" }}.</div>
-            </div>
-            <div class="card exec-card">
-              <div>
-                <span class="label">Nuclei Outcome</span>
-                <span class="exec-value {% if nuclei_skipped_reason %}status-number{% endif %}">{% if nuclei_skipped_reason %}{{ nuclei_status_label }}{% else %}{{ nuclei_count }}{% endif %}</span>
-              </div>
-              <div class="exec-note">{% if nuclei_skipped_reason %}Skipped by ROI/runtime state. See details below.{% elif nuclei_count == 0 %}Completed with zero findings.{% else %}Finding count from executed templates.{% endif %}</div>
-            </div>
-            <div class="card exec-card">
-              <div>
-                <span class="label">Scan Outcome</span>
-                <span class="exec-value">{{ scan_duration }}</span>
-              </div>
-              <div class="exec-note">{{ screenshots_status }} screenshots; {{ parameters_status }} parameters; Program Risk {% if risk_score %}{{ risk_score.get("score", 0) }}/100{% else %}not scored{% endif %}.</div>
-            </div>
-          </div>
-        </section>
-
         {% if investigation_campaigns %}
         <section class="section card" id="top-investigation-campaigns">
           <div class="section-head">
@@ -448,13 +448,11 @@
           <div class="ranking-grid">
             {% for item in investigation_campaigns[:5] %}
             <div class="ranking-card">
-              <span class="label">{{ item.confidence | default("Low") }} confidence - {{ item.validation_strength | default("None") }} validation - {{ item.opportunity_count | default(0) }} opportunities</span>
+              <span class="label">{{ item.confidence | default("Low") }} confidence - {{ item.validation_strength | default("None") }} validation</span>
               <div class="value">{{ item.name }}</div>
-              <small>{{ item.priority_reason }}</small>
-              <ul class="ranking-list" style="margin-top: 10px;">
-                <li><span>Average confidence</span><strong>{{ item.average_confidence | default("Low") }}</strong></li>
-                <li><span>Validation</span><strong>{{ item.validation_strength | default("None") }}</strong></li>
-              </ul>
+              <div><strong>Why investigate:</strong> {{ item.priority_reason }}</div>
+              <div class="action-line"><strong>Likely weakness:</strong> {{ item.likely_weakness | default("Access control or exposure weakness") }}</div>
+              <div class="note" style="margin-top: 8px;"><strong>Test first:</strong> {{ item.suggested_testing_strategy }}</div>
               {% if item.top_targets %}
               <ul class="ranking-list" style="margin-top: 10px;">
                 {% for target in item.top_targets[:4] %}
@@ -462,13 +460,17 @@
                 {% endfor %}
               </ul>
               {% endif %}
-              <div class="note" style="margin-top: 10px;">Testing strategy: {{ item.suggested_testing_strategy }}</div>
               <details class="details-lite" style="margin-top: 10px;">
-                <summary>Evidence and validation signals</summary>
+                <summary>Supporting evidence, confidence, and validation</summary>
                 <div>
+                  <ul class="ranking-list" style="margin-bottom: 10px;">
+                    <li><span>Opportunities</span><strong>{{ item.opportunity_count | default(0) }}</strong></li>
+                    <li><span>Average confidence</span><strong>{{ item.average_confidence | default("Low") }}</strong></li>
+                    <li><span>Evidence sources</span><strong>{{ item.evidence_diversity | default(0) }}</strong></li>
+                  </ul>
                   {% if item.evidence_summary %}
                   <div class="chips">
-                    {% for summary in item.evidence_summary[:4] %}
+                    {% for summary in item.evidence_summary[:3] %}
                     <span class="chip">{{ summary }}</span>
                     {% endfor %}
                   </div>
@@ -496,30 +498,35 @@
         {% endif %}
 
         {% if next_investigation_targets %}
-        <section class="section card" id="top-investigation-targets">
+        <section class="section card" id="additional-opportunities">
           <div class="section-head">
             <div>
-              <h2>Top Investigation Targets</h2>
-              <small>Opportunity-first queue for the next manual testing session</small>
+              <h2>Additional Opportunities</h2>
+              <small>Secondary leads after the canonical start-here queue</small>
             </div>
           </div>
+          {% if next_investigation_targets | length == 1 %}
+          <div class="empty">The primary target is shown above in Where Should I Start?. No additional targets were prioritized.</div>
+          {% else %}
           <div class="investigation-stack">
-            {% for item in next_investigation_targets[:5] %}
-            <div class="investigation-card {% if loop.first %}primary{% else %}compact{% endif %}">
-              <span class="label">{{ item.priority | default("Focused Review") }} - score {{ item.score | default(0) }}/100 - {{ item.confidence | default("Low") }} confidence - {{ item.validation_strength | default("None") }} validation</span>
+            {% for item in next_investigation_targets[1:6] %}
+            <div class="investigation-card compact">
+              <span class="label">{{ item.priority | default("Focused Review") }} - score {{ item.score | default(0) }}/100</span>
               <div class="lead-target">{{ item.target }}</div>
               <div><strong>Why investigate:</strong> {{ item.reason }}</div>
               <div class="action-line"><strong>Test first:</strong> {{ item.suggested_testing | default("Manual verification") }}</div>
-              <ul class="ranking-list">
-                <li><span>Indicators</span><strong>{{ item.indicator_count | default(0) }}</strong></li>
-                <li><span>Evidence sources</span><strong>{{ item.evidence_diversity | default(0) }}</strong></li>
-                <li><span>Correlation</span><strong>{{ item.correlation_strength | default(0) }}</strong></li>
-              </ul>
               <details class="details-lite">
-                <summary>Supporting evidence and validation</summary>
+                <summary>Supporting evidence, confidence, and validation</summary>
                 <div>
+                  <ul class="ranking-list">
+                    <li><span>Confidence</span><strong>{{ item.confidence | default("Low") }}</strong></li>
+                    <li><span>Validation</span><strong>{{ item.validation_strength | default("None") }}</strong></li>
+                    <li><span>Indicators</span><strong>{{ item.indicator_count | default(0) }}</strong></li>
+                    <li><span>Evidence sources</span><strong>{{ item.evidence_diversity | default(0) }}</strong></li>
+                    <li><span>Correlation</span><strong>{{ item.correlation_strength | default(0) }}</strong></li>
+                  </ul>
                   {% if item.evidence_summary %}
-                  <div class="chips">
+                  <div class="chips" style="margin-top: 10px;">
                     {% for summary in item.evidence_summary[:4] %}
                     <span class="chip">{{ summary }}</span>
                     {% endfor %}
@@ -551,6 +558,7 @@
             </div>
             {% endfor %}
           </div>
+          {% endif %}
         </section>
         {% endif %}
 
@@ -598,6 +606,29 @@
             <small>Technologies Detected: {{ attack_surface.technology_count }}</small>
           </div>
           {% if attack_surface.technologies or attack_surface.cdn_detected or attack_surface.waf_detected or attack_surface.servers %}
+          <div class="section-head" style="margin-top: 10px;">
+            <h3>Attack-Surface Technologies</h3>
+            <small>Technologies more likely to guide manual testing</small>
+          </div>
+          {% if attack_surface.attack_surface_technologies %}
+          <div class="chips">
+            {% for item in attack_surface.attack_surface_technologies %}
+            <span class="chip">{{ item.name }}{% if item.roles %}: {{ item.roles | join(" / ") }}{% endif %}</span>
+            {% endfor %}
+          </div>
+          {% else %}
+          <div class="empty">No attack-surface technologies were confidently identified. Infrastructure detections are kept below as supporting context.</div>
+          {% endif %}
+          {% if attack_surface.infrastructure_technologies %}
+          <details class="details-lite" style="margin-top: 14px;">
+            <summary>Supporting infrastructure technologies</summary>
+            <div class="chips" style="margin-top: 10px;">
+              {% for item in attack_surface.infrastructure_technologies %}
+              <span class="chip">{{ item.name }}{% if item.roles %}: {{ item.roles | join(" / ") }}{% endif %}</span>
+              {% endfor %}
+            </div>
+          </details>
+          {% endif %}
           {% if attack_surface.most_common_technologies %}
           <div class="section-head" style="margin-top: 10px;">
             <h3>Most Common Technologies</h3>
@@ -635,10 +666,9 @@
           </div>
           {% endif %}
           {% if attack_surface.technology_details %}
-          <div class="section-head" style="margin-top: 18px;">
-            <h3>Technology Evidence</h3>
-            <small>Confidence and source tracking for normalized detections</small>
-          </div>
+          <details class="data-panel" style="margin-top: 18px;">
+            <summary><span class="summary-title"><strong>Technology Evidence</strong><small>Confidence and source tracking for normalized detections</small></span><span class="summary-count">{{ attack_surface.technology_details | length }}</span></summary>
+            <div class="panel-body">
           <div class="table-wrap">
             <table>
               <thead><tr><th>Technology</th><th>Confidence</th><th>Sources</th><th>Evidence</th><th>Hosts</th></tr></thead>
@@ -655,6 +685,8 @@
               </tbody>
             </table>
           </div>
+            </div>
+          </details>
           {% endif %}
           {% else %}
           <div class="empty">No technologies identified</div>
@@ -721,7 +753,8 @@
             <div class="intel-item"><span class="intel-value">{{ historical_js.get("endpoints", []) | length }}</span><span class="intel-label">Historical JS Endpoints</span></div>
           </div>
           {% if asset_priority.get("top_assets") %}
-          <div class="section-head" style="margin-top: 18px;"><h3>Top Priority Assets</h3><small>Researcher focus queue</small></div>
+          <div class="section-head" style="margin-top: 18px;"><h3>Supporting Priority Asset Inventory</h3><small>Reference data behind the start-here queue</small></div>
+          <div class="note" style="margin-bottom: 12px;">These assets support the recommendation queue above; they are not a separate priority system.</div>
           <div class="ranking-grid">
             {% for item in asset_priority.get("top_assets", [])[:6] %}
             <div class="ranking-card">

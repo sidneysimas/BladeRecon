@@ -4,6 +4,20 @@ This is the five-minute path from install to first report.
 
 ## 1. Install
 
+Recommended:
+
+```bash
+pipx install bladerecon
+```
+
+Alternative:
+
+```bash
+python -m pip install bladerecon
+```
+
+From source for development:
+
 ```bash
 git clone https://github.com/mohamedxk9tb/BladeRecon.git
 cd BladeRecon
@@ -37,6 +51,18 @@ Optional dependencies may show warnings. That is acceptable for a first scan.
 
 ## 3. Run First Scan
 
+Recommended first run:
+
+```bash
+bladerecon doctor
+bladerecon full example.com --profile safe
+```
+
+`bladerecon scan example.com --profile safe` is an alias for the same standard
+workflow if you naturally type `scan`.
+
+Modular workflow:
+
 ```bash
 bladerecon subdomain hackerone.com
 bladerecon probe hackerone.com
@@ -51,10 +77,11 @@ bladerecon advanced hackerone.com --profile safe
 Or run the standard workflow:
 
 ```bash
-bladerecon full hackerone.com
+bladerecon full hackerone.com --profile safe
 ```
 
-For bug bounty targets, prefer the conservative safety profile:
+The default profile is `balanced`. For bug bounty targets, prefer the
+conservative safety profile:
 
 ```bash
 bladerecon full hackerone.com --profile safe
@@ -84,8 +111,9 @@ results/hackerone.com/reports/report.html
 The report is offline and includes:
 
 - Active safety profile
-- A **Where Should I Start?** dashboard with the next targets to investigate
+- An executive dashboard and a single **Where Should I Start?** queue
 - Separate Research Opportunity Score and Program Risk Score
+- Investigation campaigns written as manual testing plans
 - Attack-surface summary
 - Performance Analytics
 - Subdomains
@@ -93,8 +121,8 @@ The report is offline and includes:
 - JavaScript files
 - Endpoints
 - Parameters
-- Recon intelligence
-- Historical URLs, focused content discovery, header-derived assets, and priority assets with ranking reasons
+- Recon intelligence and supporting technology evidence
+- Historical URLs, focused content discovery, header-derived assets, and priority asset inventory
 - Secret pattern findings
 - Screenshots if available
 - Nuclei findings if available, including Smart Nuclei baseline safety-net status
