@@ -435,6 +435,18 @@
             </div>
           </div>
         </section>
+        {% elif no_actionable_surface %}
+        <section class="section card" id="where-start">
+          <div class="section-head">
+            <div>
+              <h2>Where Should I Start?</h2>
+              <small>No actionable attack surface discovered</small>
+            </div>
+          </div>
+          <div class="empty">
+            BladeRecon did not find live hosts, endpoints, secrets, findings, or validated historical surface for this target. Treat this as a low-signal or unreachable scan rather than a bug-hunting lead.
+          </div>
+        </section>
         {% endif %}
 
         {% if investigation_campaigns %}

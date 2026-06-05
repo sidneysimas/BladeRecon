@@ -128,6 +128,10 @@ class HostOpportunity:
     noise_penalty: int = 0
 
     def add(self, opportunity_type: str, value: str, score: int, reason: str, source: str = "artifact") -> None:
+        evidence_key = (opportunity_type, value.strip().lower(), reason, source)
+        if any((item.type, item.value.strip().lower(), item.reason, item.source) == evidence_key for item in self.evidence):
+            self.opportunity_types.add(opportunity_type)
+            return
         self.opportunity_types.add(opportunity_type)
         self.evidence.append(OpportunityEvidence(opportunity_type, value, score, reason, source))
         self.score += score
@@ -181,6 +185,37 @@ def _read_lines(path: Path) -> List[str]:
 def _host(value: str) -> str:
     parsed = urlparse(value if "://" in value else f"https://{value}")
     return (parsed.hostname or value).lower()
+
+
+def _is_malformed_absolute_url(value: str) -> bool:
+    if not value.startswith(("http://", "https://", "ws://", "wss://")):
+        return False
+    parsed = urlparse(value)
+    return not parsed.netloc or not parsed.hostname
+
+
+def _record_suppression(suppressions: Optional[List[Dict[str, str]]], value: str, reason: str, source: str) -> None:
+    if suppressions is None:
+        return
+    suppressions.append({"value": value, "reason": reason, "source": source})
+
+
+def _should_suppress_opportunity_value(value: str, source: str, suppressions: Optional[List[Dict[str, str]]] = None) -> bool:
+    candidate = value.strip()
+    if not candidate:
+        _record_suppression(suppressions, value, "empty_value", source)
+        return True
+    if candidate.startswith("/"):
+        _record_suppression(suppressions, value, "relative_path_without_host", source)
+        return True
+    if _is_malformed_absolute_url(candidate):
+        _record_suppression(suppressions, value, "malformed_absolute_url_without_host", source)
+        return True
+    host = _host(candidate)
+    if not host or host in {"http:", "https:", "ws:", "wss:"}:
+        _record_suppression(suppressions, value, "missing_host", source)
+        return True
+    return False
 
 
 def _resolve_ip(host: str) -> str:
@@ -697,6 +732,23 @@ def _priority_label(score: int, confidence: str, row: Dict[str, Any]) -> Dict[st
     return {"priority": priority}
 
 
+def _adjust_confidence_after_validation(row: Dict[str, Any]) -> str:
+    confidence = str(row.get("confidence") or "Low")
+    validation = str(row.get("validation_strength") or "None")
+    evidence_diversity = int(row.get("evidence_diversity") or 0)
+    correlation_strength = int(row.get("correlation_strength") or 0)
+    positives = row.get("positive_validation_signals") if isinstance(row.get("positive_validation_signals"), list) else []
+    negatives = row.get("negative_validation_signals") if isinstance(row.get("negative_validation_signals"), list) else []
+
+    if validation == "None" and evidence_diversity <= 1 and correlation_strength <= 1 and not positives:
+        return "Low"
+    if validation == "None" and negatives and confidence in {"High", "Very High"}:
+        return "Medium"
+    if validation == "Weak" and not positives and confidence == "Very High":
+        return "High"
+    return confidence
+
+
 def _opportunity_validation(opportunity: HostOpportunity, row: Dict[str, Any], scan_data: Dict[str, Any], noisy_hosts: Set[str]) -> Dict[str, Any]:
     host = opportunity.host
     types = opportunity.opportunity_types
@@ -815,7 +867,7 @@ def _opportunity_validation(opportunity: HostOpportunity, row: Dict[str, Any], s
 
 
 def _confidence_score_cap(confidence: str) -> int:
-    return {"Low": 45, "Medium": 70, "High": 88, "Very High": 100}.get(confidence, 45)
+    return {"Low": 40, "Medium": 70, "High": 88, "Very High": 100}.get(confidence, 40)
 
 
 def _evidence_summary(opportunity: HostOpportunity, strongest: List[OpportunityEvidence]) -> List[str]:
@@ -857,14 +909,17 @@ def _priority_reason(opportunity: HostOpportunity, strongest: List[OpportunityEv
     return f"Combined opportunity signals: {', '.join(type_list)}"
 
 
-def build_opportunity_priorities(scan_data: Dict[str, Any]) -> List[Dict[str, Any]]:
+def build_opportunity_priorities(scan_data: Dict[str, Any], suppressions: Optional[List[Dict[str, str]]] = None) -> List[Dict[str, Any]]:
     opportunities: Dict[str, HostOpportunity] = {}
     noisy_hosts = set()
     host_versions: Dict[str, Set[str]] = {}
     for row in scan_data.get("probe_rows", []) or []:
         if not isinstance(row, dict):
             continue
-        host = _host(str(row.get("final_url") or row.get("url") or ""))
+        probe_value = str(row.get("final_url") or row.get("url") or "")
+        if _should_suppress_opportunity_value(probe_value, "probe", suppressions):
+            continue
+        host = _host(probe_value)
         text = " ".join(str(row.get(key) or "") for key in ("cdn", "waf", "server", "title")).lower()
         if any(token in text for token in NOISY_INFRASTRUCTURE_TOKENS):
             noisy_hosts.add(host)
@@ -877,7 +932,7 @@ def build_opportunity_priorities(scan_data: Dict[str, Any]) -> List[Dict[str, An
 
     for row in scan_data.get("endpoint_rows", []) or []:
         endpoint = str(row.get("endpoint") if isinstance(row, dict) else row)
-        if not endpoint:
+        if _should_suppress_opportunity_value(endpoint, "endpoint", suppressions):
             continue
         opportunity = _host_opportunity(opportunities, endpoint)
         lower = endpoint.lower()
@@ -904,7 +959,7 @@ def build_opportunity_priorities(scan_data: Dict[str, Any]) -> List[Dict[str, An
 
     for row in scan_data.get("historical_endpoints", []) or []:
         endpoint = str(row.get("endpoint") if isinstance(row, dict) else row)
-        if not endpoint:
+        if _should_suppress_opportunity_value(endpoint, "historical_endpoint", suppressions):
             continue
         lower = endpoint.lower()
         opportunity = _host_opportunity(opportunities, endpoint)
@@ -921,6 +976,8 @@ def build_opportunity_priorities(scan_data: Dict[str, Any]) -> List[Dict[str, An
         if not isinstance(row, dict):
             continue
         url = str(row.get("url") or "")
+        if _should_suppress_opportunity_value(url, "content_discovery", suppressions):
+            continue
         path = str(row.get("path") or urlparse(url).path)
         score = int(row.get("signal_score") or 0)
         opportunity = _host_opportunity(opportunities, url)
@@ -956,12 +1013,14 @@ def build_opportunity_priorities(scan_data: Dict[str, Any]) -> List[Dict[str, An
     ):
         for url in historical_diff.get(key, []) if isinstance(historical_diff.get(key), list) else []:
             value = str(url)
+            source = "historical_alive" if key == "historical_and_currently_alive" else "historical_removed" if key == "removed_apis" else "historical_legacy"
+            if _should_suppress_opportunity_value(value, source, suppressions):
+                continue
             if key != "historical_and_currently_alive" and value.strip().lower() in alive_historical_values:
                 continue
             if key == "legacy_paths" and value.strip().lower() in removed_historical_values:
                 continue
             score = 60 if key == "historical_and_currently_alive" and _value_contains(value, API_TOKENS) else 45
-            source = "historical_alive" if key == "historical_and_currently_alive" else "historical_removed" if key == "removed_apis" else "historical_legacy"
             opportunity = _host_opportunity(opportunities, value)
             opportunity.add("Historical", value, score, reason, source=source)
             if _value_contains(value, API_TOKENS):
@@ -997,6 +1056,8 @@ def build_opportunity_priorities(scan_data: Dict[str, Any]) -> List[Dict[str, An
             continue
         row = item.to_report_row()
         row.update(_opportunity_validation(item, row, scan_data, noisy_hosts))
+        row["confidence"] = _adjust_confidence_after_validation(row)
+        row["score"] = min(int(row.get("score") or 0), _confidence_score_cap(str(row.get("confidence") or "Low")))
         row.update(_priority_label(int(row.get("score") or 0), str(row.get("confidence") or "Low"), row))
         rows.append(row)
     rows.sort(key=lambda item: (-int(item["score"]), str(item["host"])))
@@ -1139,7 +1200,8 @@ def run(target: str, output: Path = Path("results"), resume: bool = False) -> Mo
     attack_surface = build_attack_surface(target, scan_data, technologies, infrastructure, cloud_assets, risk)
     noise = _noise_assessment(scan_data, infrastructure, cloud_assets)
     priorities = build_investigation_priorities(scan_data, risk)
-    opportunity_priorities = build_opportunity_priorities(scan_data)
+    opportunity_suppressions: List[Dict[str, str]] = []
+    opportunity_priorities = build_opportunity_priorities(scan_data, suppressions=opportunity_suppressions)
 
     technology_dir = prepare_module_output(output, target, "technology", resume=resume)
     write_json(technology_dir / "technology.json", technologies)
@@ -1161,6 +1223,17 @@ def run(target: str, output: Path = Path("results"), resume: bool = False) -> Mo
     write_json(intel_dir / "noise_assessment.json", noise)
     write_json(intel_dir / "investigation_priorities.json", priorities)
     write_json(intel_dir / "opportunity_priorities.json", opportunity_priorities)
+    write_json(
+        intel_dir / "opportunity_suppressions.json",
+        {
+            "total": len(opportunity_suppressions),
+            "by_reason": {
+                reason: sum(1 for item in opportunity_suppressions if item.get("reason") == reason)
+                for reason in sorted({item.get("reason", "") for item in opportunity_suppressions})
+            },
+            "items": opportunity_suppressions[:200],
+        },
+    )
     write_json(intel_dir / "template_intelligence.json", template_intel)
     write_json(intel_dir / "attack_surface.json", attack_surface)
 

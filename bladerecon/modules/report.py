@@ -324,7 +324,40 @@ def _load_root_json(target_dir: Path, name: str, default: object) -> object:
         return default
 
 
-def _next_investigation_targets(asset_priority: dict, content_rows: List[dict], historical_diff: dict, opportunity_priorities: Optional[List[dict]] = None) -> List[dict]:
+def _has_actionable_report_surface(
+    alive_hosts: List[str],
+    js_files: List[dict],
+    endpoints: List[dict],
+    secrets: List[dict],
+    content_rows: List[dict],
+    historical_diff: dict,
+    nuclei_findings: Dict[str, List[dict]],
+    opportunity_priorities: Optional[List[dict]] = None,
+) -> bool:
+    if opportunity_priorities:
+        return True
+    if alive_hosts or js_files or endpoints or secrets or content_rows:
+        return True
+    if isinstance(nuclei_findings, dict):
+        if sum(len(rows) for rows in nuclei_findings.values()) > 0:
+            return True
+    elif isinstance(nuclei_findings, list) and nuclei_findings:
+        return True
+    if isinstance(historical_diff, dict):
+        for key in ("historical_and_currently_alive", "removed_apis", "legacy_paths"):
+            values = historical_diff.get(key)
+            if isinstance(values, list) and values:
+                return True
+    return False
+
+
+def _next_investigation_targets(
+    asset_priority: dict,
+    content_rows: List[dict],
+    historical_diff: dict,
+    opportunity_priorities: Optional[List[dict]] = None,
+    allow_inventory_fallback: bool = True,
+) -> List[dict]:
     if opportunity_priorities:
         rows = []
         for item in opportunity_priorities[:20]:
@@ -363,6 +396,8 @@ def _next_investigation_targets(asset_priority: dict, content_rows: List[dict], 
             reverse=True,
         )
         return rows[:12]
+    if not allow_inventory_fallback:
+        return []
     targets: List[dict] = []
     if isinstance(asset_priority, dict):
         for item in asset_priority.get("top_assets", [])[:5]:
@@ -1160,6 +1195,13 @@ def _render_markdown(context: dict, out_md: Path) -> None:
             if positive_rows:
                 lines.append(f"- Confirming signal: {'; '.join(str(row) for row in positive_rows[:2])}")
             lines.append("")
+    elif context.get("no_actionable_surface"):
+        lines.append("## Where Should I Start?")
+        lines.append("")
+        lines.append("No actionable attack surface discovered.")
+        lines.append("")
+        lines.append("BladeRecon did not find live hosts, endpoints, secrets, findings, or validated historical surface for this target. Treat this as a low-signal or unreachable scan rather than a bug-hunting lead.")
+        lines.append("")
     campaigns = context.get("investigation_campaigns", [])
     if campaigns:
         lines.append("## Top Investigation Campaigns")
@@ -1532,11 +1574,22 @@ def run(target: str, output: Path = Path("results"), scan_duration: Optional[str
         "endpoints": _load_json_list(target_dir / "historical_js" / "endpoints.json"),
     }
     asset_priority = _load_root_json(target_dir, "asset_priority.json", {})
+    no_actionable_surface = not _has_actionable_report_surface(
+        alive_hosts,
+        js_files,
+        endpoints,
+        secrets,
+        content_discovery,
+        historical_diff if isinstance(historical_diff, dict) else {},
+        nuclei_findings,
+        opportunity_priorities if isinstance(opportunity_priorities, list) else [],
+    )
     next_targets = _next_investigation_targets(
         asset_priority if isinstance(asset_priority, dict) else {},
         content_discovery,
         historical_diff if isinstance(historical_diff, dict) else {},
         opportunity_priorities if isinstance(opportunity_priorities, list) else [],
+        allow_inventory_fallback=not no_actionable_surface,
     )
     investigation_campaigns = _build_investigation_campaigns(next_targets)
     research_opportunity_score = _research_opportunity_score(next_targets, investigation_campaigns)
@@ -1644,6 +1697,7 @@ def run(target: str, output: Path = Path("results"), scan_duration: Optional[str
         "historical_js": historical_js,
         "asset_priority": asset_priority if isinstance(asset_priority, dict) else {},
         "next_investigation_targets": next_targets,
+        "no_actionable_surface": no_actionable_surface,
         "investigation_campaigns": investigation_campaigns,
         "research_opportunity_score": research_opportunity_score,
         "advanced_metadata": advanced_metadata if isinstance(advanced_metadata, dict) else {},

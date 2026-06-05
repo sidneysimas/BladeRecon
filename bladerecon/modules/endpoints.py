@@ -94,6 +94,9 @@ def _normalize_endpoint(raw: str, source_url: str) -> str:
     if not value:
         return ""
     if value.startswith(("http://", "https://", "ws://", "wss://")):
+        parsed = urlparse(value)
+        if not parsed.scheme or not parsed.netloc or not parsed.hostname:
+            return ""
         return value.split("#", 1)[0]
     if ROUTE_PREFIX_RE.search(value):
         value = f"/{value}"
@@ -103,6 +106,16 @@ def _normalize_endpoint(raw: str, source_url: str) -> str:
             return urljoin(f"{parsed.scheme}://{parsed.netloc}", value).split("#", 1)[0]
         return value.split("#", 1)[0]
     return ""
+
+
+def _canonical_endpoint(endpoint: str) -> str:
+    if "://" not in endpoint:
+        return endpoint.rstrip("/") or endpoint
+    parsed = urlparse(endpoint)
+    if not parsed.scheme or not parsed.netloc:
+        return endpoint
+    path = parsed.path if parsed.query else (parsed.path.rstrip("/") or parsed.path or "/")
+    return parsed._replace(path=path, fragment="").geturl()
 
 
 def _category(endpoint: str) -> str:
@@ -159,7 +172,12 @@ def _host_in_scope(host: str, root_domain: str) -> bool:
 
 
 def _is_relevant_endpoint(endpoint: str, source_url: str, root_domain: str) -> Tuple[bool, str]:
-    parsed_endpoint = urlparse(endpoint if "://" in endpoint else f"https://{endpoint}")
+    if endpoint.startswith(("http://", "https://", "ws://", "wss://")):
+        parsed_endpoint = urlparse(endpoint)
+        if not parsed_endpoint.netloc or not parsed_endpoint.hostname:
+            return False, "malformed_endpoint"
+    else:
+        parsed_endpoint = urlparse(f"https://{endpoint}")
     endpoint_host = (parsed_endpoint.hostname or "").lower()
     if not endpoint_host:
         return True, "relative_endpoint"
@@ -209,7 +227,7 @@ def run(domain: str, output: Path = Path("results"), resume: bool = False) -> Li
                 if not relevant:
                     suppressed[reason] = suppressed.get(reason, 0) + 1
                     continue
-                key = endpoint.lower()
+                key = _canonical_endpoint(endpoint).lower()
                 if key in seen:
                     continue
                 seen.add(key)
@@ -223,7 +241,7 @@ def run(domain: str, output: Path = Path("results"), resume: bool = False) -> Li
             if not relevant:
                 suppressed[reason] = suppressed.get(reason, 0) + 1
                 continue
-            key = endpoint.lower()
+            key = _canonical_endpoint(endpoint).lower()
             if key in seen:
                 continue
             seen.add(key)
