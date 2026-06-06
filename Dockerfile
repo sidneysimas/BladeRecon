@@ -2,7 +2,7 @@ FROM python:3.11-slim
 
 LABEL org.opencontainers.image.title="BladeRecon" \
       org.opencontainers.image.description="Lightweight reconnaissance framework for attack-surface discovery and reporting." \
-      org.opencontainers.image.version="0.2.0" \
+      org.opencontainers.image.version="0.2.1" \
       org.opencontainers.image.licenses="MIT" \
       org.opencontainers.image.source="https://github.com/mohamedxk9tb/BladeRecon"
 

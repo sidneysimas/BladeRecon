@@ -386,6 +386,24 @@ def test_nuclei_roi_requires_high_confidence_not_score_only(tmp_path):
     assert decision["run"] is False
 
 
+def test_nuclei_roi_skips_broad_infra_tags_without_opportunity_evidence(tmp_path):
+    target = tmp_path / "example.com" / "intelligence"
+    target.mkdir(parents=True)
+    (target / "opportunity_priorities.json").write_text("[]", encoding="utf-8")
+
+    decision = nuclei._nuclei_roi_decision(
+        tmp_path,
+        "example.com",
+        baseline_only=False,
+        selected_tags=["apache", "nginx"],
+        explicit_templates=False,
+        automatic_scan=False,
+    )
+
+    assert decision["run"] is False
+    assert "broad infrastructure tags skipped" in decision["reason"]
+
+
 def test_nuclei_roi_ignores_weak_legacy_only_validation(tmp_path):
     target = tmp_path / "example.com" / "intelligence"
     target.mkdir(parents=True)

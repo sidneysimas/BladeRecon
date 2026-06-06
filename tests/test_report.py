@@ -91,9 +91,9 @@ def test_campaigns_do_not_infer_auth_from_generic_authorization_testing() -> Non
 
     names = {item["name"] for item in campaigns}
     assert "API Ecosystem" in names
-    assert "Historical Functionality" in names
     assert "Authentication Surface" not in names
     api_campaign = next(item for item in campaigns if item["name"] == "API Ecosystem")
+    assert "Historical Functionality" in api_campaign["merged_campaigns"]
     assert api_campaign["confidence"] == "Medium"
 
 
@@ -341,6 +341,7 @@ def test_report_rendering_with_minimal_outputs(tmp_path: Path) -> None:
     assert "https://www.example.com/api/users" in html
     assert "REST APIs" in html
     assert "Google API Key" in html
+    assert "AIzaSyD-abcdefghijklmnopqrstuvwxyz01234" not in html
     assert "Secret Type" in html
     assert "Confidence" in html
     assert "Value Preview" in html
@@ -374,6 +375,7 @@ def test_report_rendering_with_minimal_outputs(tmp_path: Path) -> None:
     assert "### Top RAM Consumers" in md
     assert "### Supporting Priority Asset Inventory" in md
     assert "## Additional Opportunities" in md
+    assert "AIzaSyD-abcdefghijklmnopqrstuvwxyz01234" not in md
     assert "## Top Investigation Campaigns" in md
     assert "API Ecosystem" in md
     assert "Critical Investigation" in md

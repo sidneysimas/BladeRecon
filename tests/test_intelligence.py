@@ -234,9 +234,11 @@ def test_weak_validation_prevents_critical_priority_label():
 
     top = intelligence.build_opportunity_priorities(scan_data)[0]
 
-    assert top["score"] >= 85
+    assert top["score"] <= 60
+    assert top["confidence"] == "Medium"
     assert top["validation_strength"] == "Weak"
-    assert top["priority"] == "High Investigation"
+    assert top["priority"] == "Focused Review"
+    assert "CDN/static infrastructure evidence should support, not lead, without live validation" in top["negative_validation_signals"]
 
 
 def test_single_keyword_does_not_outrank_correlated_opportunity():
@@ -293,6 +295,7 @@ def test_opportunity_validation_distinguishes_confidence_from_observed_signals()
     assert "High Nuclei finding" in api["positive_validation_signals"]
     assert "GraphQL path returned actionable response" in api["positive_validation_signals"]
     assert cdn["validation_strength"] in {"None", "Weak"}
+    assert cdn["confidence"] in {"Low", "Medium"}
     assert "CDN/WAF infrastructure indicator observed" in cdn["negative_validation_signals"]
 
 

@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import hashlib
 import json
 import mimetypes
 import os
@@ -234,16 +235,26 @@ def _load_endpoints(target_dir: Path) -> List[dict]:
 
 def _load_secrets(target_dir: Path) -> List[dict]:
     rows = _load_json_list(target_dir / "secrets" / "secrets.json")
+    sanitized: List[dict] = []
     for row in rows:
         if not isinstance(row, dict):
             continue
         secret_type = str(row.get("type") or "Generic Secret")
         value = str(row.get("value") or "")
         confidence = str(row.get("confidence") or _secret_confidence(secret_type)).upper()
-        row.setdefault("confidence", confidence)
-        row.setdefault("risk", _secret_risk(secret_type, confidence))
-        row.setdefault("value_preview", _secret_preview(value))
-    return rows
+        sanitized.append(
+            {
+                "type": secret_type,
+                "confidence": confidence,
+                "risk": str(row.get("risk") or _secret_risk(secret_type, confidence)),
+                "source": str(row.get("source") or ""),
+                "source_type": str(row.get("source_type") or ""),
+                "value_preview": str(row.get("value_preview") or _secret_preview(value) or "[redacted]"),
+                "value_fingerprint": str(row.get("value_fingerprint") or _secret_fingerprint(value)),
+                "redacted": True,
+            }
+        )
+    return sanitized
 
 
 def _load_screenshots(target_dir: Path) -> List[str]:
@@ -518,6 +529,56 @@ def _campaign_matches(item: dict, definition: dict) -> bool:
     return any(token in text for token in definition["tokens"])
 
 
+def _merge_campaign(base: dict, duplicate: dict) -> None:
+    merged = base.setdefault("merged_campaigns", [])
+    duplicate_name = str(duplicate.get("name") or "")
+    if duplicate_name and duplicate_name not in merged:
+        merged.append(duplicate_name)
+    for key in ("positive_validation_signals", "negative_validation_signals", "evidence_summary", "top_targets"):
+        values = base.get(key) if isinstance(base.get(key), list) else []
+        for value in duplicate.get(key, []) if isinstance(duplicate.get(key), list) else []:
+            if value and value not in values:
+                values.append(value)
+        base[key] = values[:6] if key != "top_targets" else values[:5]
+    strategy = str(duplicate.get("suggested_testing_strategy") or "")
+    if strategy and strategy not in str(base.get("suggested_testing_strategy") or ""):
+        base["suggested_testing_strategy"] = f"{base.get('suggested_testing_strategy', '')}; {strategy}".strip("; ")
+    weakness = str(duplicate.get("likely_weakness") or "")
+    if weakness and weakness not in str(base.get("likely_weakness") or ""):
+        base["likely_weakness"] = f"{base.get('likely_weakness', '')}; {weakness}".strip("; ")
+    base["opportunity_count"] = max(int(base.get("opportunity_count") or 0), int(duplicate.get("opportunity_count") or 0))
+    base["max_score"] = max(int(base.get("max_score") or 0), int(duplicate.get("max_score") or 0))
+    base["correlation_strength"] = max(int(base.get("correlation_strength") or 0), int(duplicate.get("correlation_strength") or 0))
+    base["evidence_diversity"] = max(int(base.get("evidence_diversity") or 0), int(duplicate.get("evidence_diversity") or 0))
+
+
+def _campaigns_are_duplicates(first: dict, second: dict) -> bool:
+    first_targets = {str(value) for value in first.get("top_targets", []) if str(value)}
+    second_targets = {str(value) for value in second.get("top_targets", []) if str(value)}
+    if not first_targets or not second_targets:
+        return False
+    target_overlap = len(first_targets.intersection(second_targets)) / max(1, min(len(first_targets), len(second_targets)))
+    if target_overlap < 0.8:
+        return False
+    first_evidence = {str(value).lower() for value in first.get("evidence_summary", []) if str(value)}
+    second_evidence = {str(value).lower() for value in second.get("evidence_summary", []) if str(value)}
+    if not first_evidence or not second_evidence:
+        return target_overlap == 1.0
+    evidence_overlap = len(first_evidence.intersection(second_evidence)) / max(1, min(len(first_evidence), len(second_evidence)))
+    return evidence_overlap >= 0.5
+
+
+def _dedupe_campaigns(campaigns: List[dict]) -> List[dict]:
+    deduped: List[dict] = []
+    for campaign in campaigns:
+        duplicate = next((item for item in deduped if _campaigns_are_duplicates(item, campaign)), None)
+        if duplicate:
+            _merge_campaign(duplicate, campaign)
+            continue
+        deduped.append(campaign)
+    return deduped
+
+
 def _build_investigation_campaigns(next_targets: List[dict]) -> List[dict]:
     campaigns: List[dict] = []
     for name, definition in CAMPAIGN_DEFINITIONS.items():
@@ -596,7 +657,7 @@ def _build_investigation_campaigns(next_targets: List[dict]) -> List[dict]:
         ),
         reverse=True,
     )
-    return campaigns[:10]
+    return _dedupe_campaigns(campaigns)[:10]
 
 
 def _research_opportunity_score(next_targets: List[dict], campaigns: List[dict]) -> Dict[str, object]:
@@ -880,6 +941,13 @@ def _secret_preview(value: str) -> str:
     if len(clean) <= 18:
         return clean
     return f"{clean[:8]}...{clean[-6:]}"
+
+
+def _secret_fingerprint(value: str) -> str:
+    clean = str(value or "").strip()
+    if not clean:
+        return ""
+    return hashlib.sha256(clean.encode("utf-8", errors="ignore")).hexdigest()[:16]
 
 
 def _technology_display_name(value: str) -> str:
@@ -1216,6 +1284,8 @@ def _render_markdown(context: dict, out_md: Path) -> None:
             lines.append(f"- Likely weakness: {item.get('likely_weakness', 'Access control or exposure weakness')}")
             lines.append(f"- Test first: {item.get('suggested_testing_strategy', 'Manual testing')}")
             lines.append(f"- Confidence: {item.get('confidence', 'Low')}; validation: {item.get('validation_strength', 'None')}")
+            if isinstance(item.get("merged_campaigns"), list) and item.get("merged_campaigns"):
+                lines.append(f"- Merged related focus: {'; '.join(str(row) for row in item.get('merged_campaigns', [])[:4])}")
             if top_targets:
                 lines.append(f"- Top targets: {top_targets}")
             if evidence:
@@ -1385,9 +1455,6 @@ def _render_markdown(context: dict, out_md: Path) -> None:
         lines.append(f"- {s} - {status}")
     lines.append("")
 
-    lines.append("## Interesting Parameters")
-    lines.append("")
-
     lines.append("## Advanced Recon Intelligence")
     lines.append("")
     historical_diff = context.get("historical_diff", {})
@@ -1406,7 +1473,7 @@ def _render_markdown(context: dict, out_md: Path) -> None:
     lines.append(f"- Header assets: {len(header_assets.get('assets', [])) if isinstance(header_assets, dict) else 0}")
     lines.append(f"- Historical JS endpoints: {len(historical_js_data.get('endpoints', [])) if isinstance(historical_js_data, dict) else 0}")
     lines.append("")
-    if isinstance(asset_priority, dict) and asset_priority.get("top_assets"):
+    if isinstance(asset_priority, dict) and asset_priority.get("top_assets") and not context.get("no_actionable_surface"):
         lines.append("### Supporting Priority Asset Inventory")
         lines.append("")
         lines.append("These assets support the start-here queue above; they are not a separate priority list.")
@@ -1426,7 +1493,9 @@ def _render_markdown(context: dict, out_md: Path) -> None:
         lines.append("")
         lines.append("Top target cards are shown near the beginning of the report under **Where Should I Start?**.")
         lines.append("")
-    if not context.get("parameters_skipped_reason"):
+    if not context.get("parameters_skipped_reason") and (param_intel.get("total_count", 0) or context.get("interesting_parameters")):
+        lines.append("## Interesting Parameters")
+        lines.append("")
         lines.append(f"- Discovered Parameters: {param_intel.get('discovered_count', 0)}")
         lines.append(f"- Candidate Parameters: {param_intel.get('candidate_count', 0)}")
         lines.append(f"- Total Parameters: {param_intel.get('total_count', 0)}")
@@ -1434,9 +1503,9 @@ def _render_markdown(context: dict, out_md: Path) -> None:
         lines.append(f"- Medium Value Parameters: {param_intel.get('medium_count', 0)}")
         lines.append(f"- Low Value Parameters: {param_intel.get('low_count', 0)}")
         lines.append("")
-    for p in context.get('interesting_parameters', []):
-        lines.append(f"- {p}")
-    lines.append("")
+        for p in context.get('interesting_parameters', []):
+            lines.append(f"- {p}")
+        lines.append("")
 
     lines.append("## Screenshots")
     lines.append("")
@@ -1483,12 +1552,21 @@ def _render_markdown(context: dict, out_md: Path) -> None:
     metadata = context.get("nuclei_metadata", {})
     if metadata:
         lines.append(f"- Coverage strategy: {metadata.get('coverage_strategy', 'profile/default')}")
+        status = str(metadata.get("status") or metadata.get("coverage_status") or "").lower()
+        coverage_status = str(metadata.get("coverage_status") or ("incomplete_timeout" if status == "timed_out" else "completed" if status == "completed" else "not recorded"))
+        lines.append(f"- Coverage status: {coverage_status}")
+        if status == "timed_out" or coverage_status == "incomplete_timeout":
+            lines.append(f"- Timeout: coverage incomplete after {metadata.get('timeout_seconds', 'configured timeout')}s")
+            if metadata.get("incomplete_reason"):
+                lines.append(f"- Incomplete reason: {metadata.get('incomplete_reason')}")
         baseline = metadata.get("baseline_scan", {}) if isinstance(metadata.get("baseline_scan"), dict) else {}
         if baseline:
             applied = "applied" if baseline.get("applied") else "not applied"
             lines.append(f"- Baseline safety net: {applied}, status {baseline.get('status', 'not_applicable')}, severity {baseline.get('severity', 'critical,high')}")
-        lines.append(f"- Templates executed: {metadata.get('templates_executed', 'Not recorded')}")
-        lines.append(f"- Templates skipped: {metadata.get('templates_skipped', 'Not recorded')}")
+        templates_executed = metadata.get("templates_executed")
+        templates_skipped = metadata.get("templates_skipped")
+        lines.append(f"- Templates executed: {templates_executed if templates_executed is not None else 'Incomplete / not recorded'}")
+        lines.append(f"- Templates skipped: {templates_skipped if templates_skipped is not None else 'Incomplete / not recorded'}")
         lines.append(f"- Execution duration: {metadata.get('duration_seconds', 'Not recorded')}s")
         lines.append(f"- Findings count: {metadata.get('findings_count', context.get('nuclei_count', 0))}")
         lines.append("")

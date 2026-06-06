@@ -465,6 +465,9 @@
               <div><strong>Why investigate:</strong> {{ item.priority_reason }}</div>
               <div class="action-line"><strong>Likely weakness:</strong> {{ item.likely_weakness | default("Access control or exposure weakness") }}</div>
               <div class="note" style="margin-top: 8px;"><strong>Test first:</strong> {{ item.suggested_testing_strategy }}</div>
+              {% if item.merged_campaigns %}
+              <div class="note" style="margin-top: 8px;"><strong>Merged related focus:</strong> {{ item.merged_campaigns[:4] | join("; ") }}</div>
+              {% endif %}
               {% if item.top_targets %}
               <ul class="ranking-list" style="margin-top: 10px;">
                 {% for target in item.top_targets[:4] %}
@@ -856,11 +859,15 @@
           </div>
           {% if nuclei_metadata %}
           <div class="grid intel-grid">
-            <div class="intel-item"><span class="intel-value">{{ nuclei_metadata.get("templates_executed", "Not recorded") }}</span><span class="intel-label">Templates Executed</span></div>
-            <div class="intel-item"><span class="intel-value">{{ nuclei_metadata.get("templates_skipped", "Not recorded") }}</span><span class="intel-label">Templates Skipped</span></div>
+            <div class="intel-item"><span class="intel-value">{{ nuclei_metadata.get("coverage_status", "completed" if nuclei_metadata.get("status") == "completed" else nuclei_metadata.get("status", "Not recorded")) }}</span><span class="intel-label">Coverage Status</span></div>
+            <div class="intel-item"><span class="intel-value">{{ nuclei_metadata.get("templates_executed") if nuclei_metadata.get("templates_executed") is not none else "Incomplete" }}</span><span class="intel-label">Templates Executed</span></div>
+            <div class="intel-item"><span class="intel-value">{{ nuclei_metadata.get("templates_skipped") if nuclei_metadata.get("templates_skipped") is not none else "Incomplete" }}</span><span class="intel-label">Templates Skipped</span></div>
             <div class="intel-item"><span class="intel-value">{{ nuclei_metadata.get("duration_seconds", "Not recorded") }}s</span><span class="intel-label">Nuclei Duration</span></div>
             <div class="intel-item"><span class="intel-value">{{ nuclei_metadata.get("findings_count", nuclei_count) }}</span><span class="intel-label">Findings Count</span></div>
           </div>
+          {% if nuclei_metadata.get("status") == "timed_out" or nuclei_metadata.get("coverage_status") == "incomplete_timeout" %}
+          <div class="note" style="margin-top: 12px;">Nuclei timed out after {{ nuclei_metadata.get("timeout_seconds", "the configured timeout") }}s. Coverage is incomplete, so zero findings should not be interpreted as clean validation.</div>
+          {% endif %}
           {% if nuclei_metadata.get("baseline_scan") %}
           <div class="note" style="margin-top: 12px;">Coverage strategy: {{ nuclei_metadata.get("coverage_strategy", "profile/default") }}. Baseline safety net: {{ nuclei_metadata.get("baseline_scan", {}).get("status", "not_applicable") }}{% if nuclei_metadata.get("baseline_scan", {}).get("applied") %}, severity {{ nuclei_metadata.get("baseline_scan", {}).get("severity") }}{% endif %}.</div>
           {% endif %}
@@ -1153,12 +1160,12 @@
           };
         },
         secrets(full = false, query = '') {
-          const items = filterItems(data.secrets, query, (item) => `${item.type || ''} ${item.confidence || ''} ${item.risk || ''} ${item.value || ''} ${item.source || ''}`);
+          const items = filterItems(data.secrets, query, (item) => `${item.type || ''} ${item.confidence || ''} ${item.risk || ''} ${item.value_preview || ''} ${item.value_fingerprint || ''} ${item.source || ''}`);
           const visible = full || query ? items : items.slice(0, PREVIEW_LIMIT);
           const rows = visible.map((item) => {
             const confidence = String(item.confidence || 'LOW').toUpperCase();
             const cls = confidence === 'HIGH' ? 'high' : confidence === 'MEDIUM' ? 'medium' : 'low';
-            return `<tr><td>${categoryBadge(item.type || 'Secret', cls)}</td><td>${categoryBadge(confidence, cls)}</td><td>${code(item.source || '')}</td><td>${code(item.value_preview || item.value || '')}</td><td>${categoryBadge(item.risk || 'Low', cls)}</td></tr>`;
+            return `<tr><td>${categoryBadge(item.type || 'Secret', cls)}</td><td>${categoryBadge(confidence, cls)}</td><td>${code(item.source || '')}</td><td>${code(item.value_preview || '[redacted]')}</td><td>${categoryBadge(item.risk || 'Low', cls)}</td></tr>`;
           });
           return {
             count: `Showing ${visible.length} of ${items.length} Secrets`,
@@ -1231,7 +1238,7 @@
         javascript: `<a class="btn" href="../js/js_files.txt">Export JS Files</a><a class="btn" href="../js/js_files.json">JSON</a>`,
         endpoints: `<a class="btn" href="../endpoints/endpoints.txt">Export Endpoints</a><a class="btn" href="../endpoints/endpoints.json">JSON</a>`,
         parameters: data.parametersSkippedReason ? '' : `<a class="btn" href="../parameters/parameters.txt">Export Parameters</a><a class="btn" href="../parameters/parameters.json">JSON</a>`,
-        secrets: `<a class="btn" href="../secrets/secrets.txt">Export Secrets</a><a class="btn" href="../secrets/secrets.json">JSON</a>`
+        secrets: `<a class="btn" href="../secrets/secrets.txt">Export Redacted Secrets</a>`
       };
 
       function renderPanel(name, full = false, query = '') {

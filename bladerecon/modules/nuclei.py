@@ -25,6 +25,7 @@ from .intelligence import TEMPLATE_TAGS
 from .utils import ModuleResult, atomic_write_text, config_get, deduplicate_alive_urls, format_duration, get_profiled_ceiling, get_profiled_concurrency, get_profiled_rate_limit, get_timeout, info, load_config, log_duration, normalize_scan_profile, normalize_target, nuclei_template_status, prepare_module_output, print_module_summary, setup_logging, skipped_result, skip, success, suppress_third_party_banner, target_output_dir, warn, write_json
 
 SEVERITY_ORDER = ("critical", "high", "medium", "low", "info", "unknown")
+BROAD_INFRA_TAGS = {"apache", "nginx"}
 
 
 def _nuclei_exists() -> bool:
@@ -189,6 +190,22 @@ def _nuclei_roi_decision(output: Path, target_name: str, baseline_only: bool, se
     if explicit_templates:
         return {"run": True, "reason": "explicit templates supplied"}
     if selected_tags:
+        selected = {str(tag).strip().lower() for tag in selected_tags if str(tag).strip()}
+        if selected and selected.issubset(BROAD_INFRA_TAGS):
+            roi_hosts = _load_roi_target_hosts(output, target_name, max_hosts=10)
+            if not roi_hosts:
+                return {
+                    "run": False,
+                    "reason": "broad infrastructure tags skipped: no validated opportunity hosts",
+                    "broad_tags": sorted(selected),
+                    "roi_hosts": [],
+                }
+            return {
+                "run": True,
+                "reason": "broad infrastructure tags constrained to ROI opportunity hosts",
+                "broad_tags": sorted(selected),
+                "roi_hosts": roi_hosts,
+            }
         return {"run": True, "reason": "high-confidence intelligence tags selected"}
     if automatic_scan:
         return {"run": True, "reason": "automatic scan enabled"}
@@ -324,6 +341,61 @@ def _scope_target_list(
         "host_scope": target_hosts,
         "reason": "technology-tag target scope",
     }
+
+
+def _scope_current_targets_to_hosts(
+    target_domain: Optional[str],
+    target_list: Optional[Path],
+    out_dir: Path,
+    hosts: List[str],
+    reason: str,
+) -> Tuple[Optional[str], Optional[Path], Dict[str, object]]:
+    host_set = {str(host).strip().lower() for host in hosts if str(host).strip()}
+    if not host_set:
+        return target_domain, target_list, {"enabled": False, "reason": "no ROI hosts"}
+    if target_list and target_list.exists():
+        raw_targets = [line.strip() for line in target_list.read_text(encoding="utf-8-sig").splitlines() if line.strip()]
+        scoped_targets: List[str] = []
+        for target in raw_targets:
+            parsed = urlparse(target if "://" in target else f"https://{target}")
+            host = (parsed.hostname or target).lower()
+            if host in host_set:
+                scoped_targets.append(target)
+        if not scoped_targets:
+            return None, target_list, {
+                "enabled": False,
+                "reason": "ROI hosts were not present in active target list",
+                "host_scope": sorted(host_set),
+                "original_targets": len(raw_targets),
+                "scoped_targets": 0,
+            }
+        if len(scoped_targets) >= len(raw_targets):
+            return target_domain, target_list, {
+                "enabled": False,
+                "reason": "ROI scope did not reduce target set",
+                "host_scope": sorted(host_set),
+                "original_targets": len(raw_targets),
+                "scoped_targets": len(scoped_targets),
+            }
+        scoped_file = out_dir / "roi_scoped_targets.txt"
+        scoped_file.write_text("\n".join(scoped_targets) + "\n", encoding="utf-8")
+        return None, scoped_file, {
+            "enabled": True,
+            "path": str(scoped_file),
+            "original_targets": len(raw_targets),
+            "scoped_targets": len(scoped_targets),
+            "host_scope": sorted(host_set),
+            "reason": reason,
+        }
+    if target_domain and _opportunity_host(target_domain) not in host_set:
+        return None, None, {
+            "enabled": False,
+            "reason": "single target did not match ROI hosts",
+            "host_scope": sorted(host_set),
+            "original_targets": 1,
+            "scoped_targets": 0,
+        }
+    return target_domain, target_list, {"enabled": False, "reason": "single target already matches ROI host", "host_scope": sorted(host_set)}
 
 
 def _opportunity_host(value: object) -> str:
@@ -926,6 +998,34 @@ def run(
         explicit_templates=explicit_templates,
         automatic_scan=automatic_scan,
     )
+    selected_tag_set = {str(tag).strip().lower() for tag in selected_tags if str(tag).strip()}
+    broad_tag_only = bool(selected_tag_set) and selected_tag_set.issubset(BROAD_INFRA_TAGS) and not explicit_templates
+    if roi_gate_enabled and broad_tag_only and bool(roi_decision.get("run", True)):
+        roi_hosts = [str(host) for host in roi_decision.get("roi_hosts", []) if str(host).strip()] if isinstance(roi_decision.get("roi_hosts"), list) else []
+        target_domain, target_list, roi_scope = _scope_current_targets_to_hosts(
+            target_domain,
+            target_list,
+            out_dir,
+            roi_hosts,
+            "broad infrastructure tags constrained to ROI opportunity hosts",
+        )
+        if roi_scope.get("enabled"):
+            cmd = _remove_flag_with_value(cmd, "-l")
+            cmd = _remove_flag_with_value(cmd, "-u")
+            target_list = Path(str(roi_scope["path"]))
+            target_domain = None
+            cmd += ["-l", str(target_list)]
+            target_count = _count_targets(target_domain, target_list)
+            target_scope = {
+                "enabled": True,
+                "reason": "technology-tag scope refined by ROI opportunity hosts",
+                "technology_scope": target_scope,
+                "roi_scope": roi_scope,
+                "original_targets": roi_scope.get("original_targets"),
+                "scoped_targets": roi_scope.get("scoped_targets"),
+                "host_scope": roi_scope.get("host_scope", []),
+            }
+            selection_reason = "broad infrastructure tags; constrained to ROI opportunity hosts"
     if roi_gate_enabled and not bool(roi_decision.get("run", True)):
         duration = time.perf_counter() - started
         reason = str(roi_decision.get("reason") or "baseline-only scan skipped: insufficient opportunity evidence")
@@ -942,7 +1042,7 @@ def run(
             "selected_tags_requested": selected_tags_requested,
             "selected_tags": selected_tags,
             "selection_reason": selection_reason,
-            "coverage_strategy": "skipped_low_roi_baseline",
+            "coverage_strategy": "skipped_low_roi_baseline" if baseline_only else "skipped_low_roi",
             "roi_decision": roi_decision,
             "baseline_reason": reason,
             "baseline_skip_reason": reason,
@@ -1429,7 +1529,9 @@ def run(
                 "selected_tags": selected_tags,
                 "selection_reason": selection_reason,
                 "coverage_strategy": "smart_tags_plus_lightweight_baseline" if baseline_needed else "baseline_only" if baseline_only else selection_reason,
+                "coverage_status": "completed",
                 "tag_fallback_reason": tag_fallback_reason,
+                "roi_decision": roi_decision,
                 "baseline_reason": baseline_reason,
                 "baseline_skip_reason": baseline_skip_reason,
                 "baseline_roi": baseline_roi,
@@ -1524,7 +1626,9 @@ def run(
                 "selected_tags": selected_tags,
                 "selection_reason": selection_reason,
                 "coverage_strategy": "smart_tags_plus_lightweight_baseline" if "baseline_needed" in locals() and baseline_needed else "baseline_only" if "baseline_only" in locals() and baseline_only else selection_reason,
+                "coverage_status": "incomplete_timeout",
                 "tag_fallback_reason": tag_fallback_reason,
+                "roi_decision": roi_decision if "roi_decision" in locals() else {"run": True, "reason": "not evaluated before timeout"},
                 "baseline_reason": baseline_reason if "baseline_reason" in locals() else "not evaluated",
                 "baseline_skip_reason": baseline_skip_reason if "baseline_skip_reason" in locals() else "",
                 "baseline_roi": baseline_roi if "baseline_roi" in locals() else {"run": False, "reason": "not evaluated", "targets": []},
@@ -1555,6 +1659,10 @@ def run(
                 "duration_seconds": round(duration, 2),
                 "timeout_seconds": effective_timeout,
                 "status": "timed_out",
+                "findings_count": 0,
+                "templates_executed": None,
+                "templates_skipped": None,
+                "incomplete_reason": f"nuclei timed out after {effective_timeout}s before coverage could be trusted",
                 "command": cmd,
             },
         )

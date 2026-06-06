@@ -870,6 +870,27 @@ def _confidence_score_cap(confidence: str) -> int:
     return {"Low": 40, "Medium": 70, "High": 88, "Very High": 100}.get(confidence, 40)
 
 
+def _cdn_like_host(host: str, noisy_hosts: Set[str]) -> bool:
+    lower = str(host or "").lower()
+    return lower in noisy_hosts or any(token in lower for token in ("cdn", "static", "assets", "edge", "cache"))
+
+
+def _has_live_validation_signal(row: Dict[str, Any]) -> bool:
+    positives = row.get("positive_validation_signals")
+    if not isinstance(positives, list):
+        return False
+    text = " ".join(str(value).lower() for value in positives)
+    return any(
+        token in text
+        for token in (
+            "nuclei finding",
+            "returned actionable response",
+            "access confirmed",
+            "interesting response pattern",
+        )
+    )
+
+
 def _evidence_summary(opportunity: HostOpportunity, strongest: List[OpportunityEvidence]) -> List[str]:
     summary = []
     if "GraphQL" in opportunity.opportunity_types:
@@ -1058,9 +1079,17 @@ def build_opportunity_priorities(scan_data: Dict[str, Any], suppressions: Option
         row.update(_opportunity_validation(item, row, scan_data, noisy_hosts))
         row["confidence"] = _adjust_confidence_after_validation(row)
         row["score"] = min(int(row.get("score") or 0), _confidence_score_cap(str(row.get("confidence") or "Low")))
+        if _cdn_like_host(item.host, noisy_hosts) and not _has_live_validation_signal(row):
+            negatives = row.get("negative_validation_signals") if isinstance(row.get("negative_validation_signals"), list) else []
+            _add_unique_signal(negatives, "CDN/static infrastructure evidence should support, not lead, without live validation")
+            row["negative_validation_signals"] = negatives[:6]
+            row["confidence"] = "Medium" if row.get("confidence") in {"High", "Very High"} else str(row.get("confidence") or "Low")
+            row["validation_strength"] = "Weak" if row.get("validation_strength") in {"Moderate", "Strong"} else str(row.get("validation_strength") or "None")
+            row["validation_score"] = min(int(row.get("validation_score") or 0), 2)
+            row["score"] = min(int(row.get("score") or 0), 60)
         row.update(_priority_label(int(row.get("score") or 0), str(row.get("confidence") or "Low"), row))
         rows.append(row)
-    rows.sort(key=lambda item: (-int(item["score"]), str(item["host"])))
+    rows.sort(key=lambda item: (-int(item["score"]), _cdn_like_host(str(item["host"]), noisy_hosts), str(item["host"])))
     return rows[:20]
 
 

@@ -1,7 +1,7 @@
 services:
   bladerecon:
     build: .
-    image: bladerecon:0.2.0
+    image: bladerecon:0.2.1
     command: ["--help"]
     volumes:
       - ./results:/app/results
@@ -9,7 +9,7 @@ services:
 
   doctor:
     build: .
-    image: bladerecon:0.2.0
+    image: bladerecon:0.2.1
     command: ["doctor"]
     volumes:
       - ./results:/app/results
@@ -17,7 +17,7 @@ services:
 
   recon:
     build: .
-    image: bladerecon:0.2.0
+    image: bladerecon:0.2.1
     profiles: ["recon"]
     command: ["full", "example.com", "--no-all", "--profile", "safe"]
     volumes:
@@ -26,7 +26,7 @@ services:
 
   full:
     build: .
-    image: bladerecon:0.2.0
+    image: bladerecon:0.2.1
     profiles: ["full"]
     command: ["full", "example.com", "--profile", "safe"]
     volumes:
@@ -35,7 +35,7 @@ services:
 
   advanced:
     build: .
-    image: bladerecon:0.2.0
+    image: bladerecon:0.2.1
     profiles: ["advanced"]
     command: ["advanced", "example.com", "--profile", "safe"]
     volumes:
@@ -44,7 +44,7 @@ services:
 
   report:
     build: .
-    image: bladerecon:0.2.0
+    image: bladerecon:0.2.1
     profiles: ["report"]
     command: ["report", "example.com"]
     volumes:

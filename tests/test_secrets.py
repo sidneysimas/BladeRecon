@@ -20,6 +20,8 @@ def test_find_secrets_detects_common_javascript_patterns() -> None:
     assert by_type["Bearer Token"]["confidence"] == "MEDIUM"
     assert by_type["Bearer Token"]["risk"] == "Medium"
     assert "value_preview" in by_type["Google API Key"]
+    assert "value" not in by_type["Google API Key"]
+    assert by_type["Google API Key"]["value_fingerprint"]
 
 
 def test_secret_run_consumes_historical_js_secret_artifacts(tmp_path: Path) -> None:
@@ -50,8 +52,9 @@ def test_secret_run_consumes_historical_js_secret_artifacts(tmp_path: Path) -> N
     assert rows == [
         {
             "type": "Google API Key",
-            "value": "AIzaSyD-abcdefghijklmnopqrstuvwxyz01234",
             "value_preview": "AIzaSyD-...01234",
+            "value_fingerprint": rows[0]["value_fingerprint"],
+            "redacted": "true",
             "confidence": "HIGH",
             "risk": "High",
             "source": "https://static.example.com/app.js",

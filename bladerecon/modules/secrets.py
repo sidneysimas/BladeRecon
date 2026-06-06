@@ -1,11 +1,12 @@
 """Informational secret pattern discovery for downloaded JavaScript."""
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import time
 from pathlib import Path
-from typing import Dict, List, Pattern, Tuple
+from typing import Dict, List, Optional, Pattern, Tuple
 
 from .utils import atomic_write_text, info, log_duration, prepare_module_output, print_module_summary, setup_logging, success, target_output_dir, warn, write_json
 
@@ -58,6 +59,25 @@ def _value_preview(value: str) -> str:
     return f"{clean[:8]}...{clean[-6:]}"
 
 
+def _value_fingerprint(value: str) -> str:
+    clean = str(value or "").strip()
+    if not clean:
+        return ""
+    return hashlib.sha256(clean.encode("utf-8", errors="ignore")).hexdigest()[:16]
+
+
+def _redacted_finding(secret_type: str, value: str, confidence: Optional[str] = None, risk: Optional[str] = None) -> Dict[str, str]:
+    resolved_confidence = str(confidence or _secret_confidence(secret_type)).upper()
+    return {
+        "type": secret_type,
+        "value_preview": _value_preview(value),
+        "value_fingerprint": _value_fingerprint(value),
+        "redacted": "true",
+        "confidence": resolved_confidence,
+        "risk": str(risk or _secret_risk(secret_type, resolved_confidence)),
+    }
+
+
 def _load_js_rows(target_dir: Path) -> List[dict]:
     path = target_dir / "js" / "js_files.json"
     if not path.exists():
@@ -99,15 +119,7 @@ def _find_secrets(content: str) -> List[Dict[str, str]]:
         for match in pattern.finditer(content):
             value = match.group(0)
             confidence = _secret_confidence(secret_type)
-            findings.append(
-                {
-                    "type": secret_type,
-                    "value": value,
-                    "value_preview": _value_preview(value),
-                    "confidence": confidence,
-                    "risk": _secret_risk(secret_type, confidence),
-                }
-            )
+            findings.append(_redacted_finding(secret_type, value, confidence))
     return findings
 
 
@@ -132,7 +144,11 @@ def run(domain: str, output: Path = Path("results"), resume: bool = False) -> Li
             if not content:
                 continue
             for finding in _find_secrets(content):
-                key = (finding["type"], finding["value"], source_url)
+                key = (
+                    finding["type"],
+                    finding.get("value_fingerprint") or finding.get("value_preview") or "",
+                    source_url,
+                )
                 if key in seen:
                     continue
                 seen.add(key)
@@ -141,7 +157,7 @@ def run(domain: str, output: Path = Path("results"), resume: bool = False) -> Li
             if not isinstance(row, dict):
                 continue
             secret_type = str(row.get("type") or "")
-            value = str(row.get("value") or "")
+            value = str(row.get("value") or row.get("value_preview") or "")
             source_url = str(row.get("source") or "historical_js")
             if not secret_type or not value:
                 continue
@@ -150,22 +166,16 @@ def run(domain: str, output: Path = Path("results"), resume: bool = False) -> Li
                 continue
             seen.add(key)
             confidence = str(row.get("confidence") or _secret_confidence(secret_type))
-            findings.append(
-                {
-                    "type": secret_type,
-                    "value": value,
-                    "value_preview": str(row.get("value_preview") or _value_preview(value)),
-                    "confidence": confidence,
-                    "risk": str(row.get("risk") or _secret_risk(secret_type, confidence)),
-                    "source": source_url,
-                    "source_type": "historical_js",
-                }
-            )
+            finding = _redacted_finding(secret_type, value, confidence, str(row.get("risk") or ""))
+            if row.get("value_preview"):
+                finding["value_preview"] = str(row.get("value_preview"))
+            finding.update({"source": source_url, "source_type": "historical_js"})
+            findings.append(finding)
 
     atomic_write_text(
         out_dir / "secrets.txt",
         "\n".join(
-            f"{item['type']} [{item.get('confidence', 'LOW')}]: {item.get('value_preview') or item['value']} ({item['source']})"
+            f"{item['type']} [{item.get('confidence', 'LOW')}]: {item.get('value_preview', '[redacted]')} ({item['source']})"
             for item in findings
         ),
         encoding="utf-8",
