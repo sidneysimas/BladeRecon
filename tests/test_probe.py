@@ -21,6 +21,14 @@ def test_probe_treats_redirect_and_auth_statuses_as_alive():
     assert 403 in probe.ALIVE_STATUS_CODES
 
 
+def test_extract_title_handles_xml_content_type() -> None:
+    xml = """<?xml version="1.0"?>
+    <feed><title>Example Feed</title></feed>
+    """
+
+    assert probe._extract_title(xml, "application/xml") == "Example Feed"
+
+
 def test_technology_outputs_merge_duplicate_hosts(tmp_path: Path):
     target_dir = tmp_path / "example.com"
     probe._write_technology_outputs(

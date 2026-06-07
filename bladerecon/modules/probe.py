@@ -13,6 +13,7 @@ import asyncio
 import json
 import re
 import time
+import warnings
 from pathlib import Path
 from typing import Dict, List, Optional
 from urllib.parse import urlparse
@@ -67,16 +68,27 @@ REDIRECT_STATUS_CODES = {301, 302, 303, 307, 308}
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _extract_title(html: str) -> str:
+def _looks_like_xml_document(text: str) -> bool:
+    sample = str(text or "").lstrip()[:300].lower()
+    return sample.startswith("<?xml") or sample.startswith(("<rss", "<feed", "<urlset", "<sitemapindex"))
+
+
+def _extract_title(html: str, content_type: str = "") -> str:
     """Extract the ``<title>`` from an HTML document."""
     try:
-        from bs4 import BeautifulSoup
+        from bs4 import BeautifulSoup, XMLParsedAsHTMLWarning
     except ImportError:
         console.print("[red]BeautifulSoup is not installed. Run: pip install beautifulsoup4[/]")
         return ""
 
     try:
-        soup = BeautifulSoup(html, "html.parser")
+        parser = "xml" if "xml" in str(content_type).lower() or _looks_like_xml_document(html) else "html.parser"
+        try:
+            soup = BeautifulSoup(html, parser)
+        except Exception:
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", category=XMLParsedAsHTMLWarning)
+                soup = BeautifulSoup(html, "html.parser")
         tag = soup.find("title")
         return tag.get_text(strip=True) if tag else ""
     except Exception:
@@ -457,7 +469,7 @@ async def _probe_url(
             await resp.aclose()
 
         text = body.decode(resp.encoding or "utf-8", errors="replace") if body else ""
-        title = _extract_title(text[:5000]) if text else ""
+        title = _extract_title(text[:5000], resp.headers.get("content-type", "")) if text else ""
         redirects = []
         location = resp.headers.get("location")
         if location:

@@ -9,12 +9,13 @@ import asyncio
 import hashlib
 import json
 import time
+import warnings
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 from urllib.parse import urljoin, urlparse
 
 import httpx
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, XMLParsedAsHTMLWarning
 
 from .utils import (
     AsyncRateLimiter,
@@ -203,11 +204,26 @@ def _prioritize_alive_hosts(alive_hosts: List[str], probe_rows: List[Dict[str, o
     return selected
 
 
+def _looks_like_xml_document(text: str) -> bool:
+    sample = str(text or "").lstrip()[:300].lower()
+    return sample.startswith("<?xml") or sample.startswith(("<rss", "<feed", "<urlset", "<sitemapindex"))
+
+
+def _parse_markup(text: str) -> BeautifulSoup:
+    parser = "xml" if _looks_like_xml_document(text) else "html.parser"
+    try:
+        return BeautifulSoup(text, parser)
+    except Exception:
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=XMLParsedAsHTMLWarning)
+            return BeautifulSoup(text, "html.parser")
+
+
 def _extract_script_urls(html: str, base_url: str) -> List[str]:
     """Extract and normalize external script URLs from HTML."""
     urls: List[str] = []
     try:
-        soup = BeautifulSoup(html, "html.parser")
+        soup = _parse_markup(html)
         scripts = soup.find_all("script", src=True)
     except Exception:
         return []

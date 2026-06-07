@@ -18,6 +18,18 @@ def test_extract_script_urls_resolves_relative_and_deduplicates() -> None:
     ]
 
 
+def test_extract_script_urls_handles_xml_like_documents() -> None:
+    xml = """<?xml version="1.0"?>
+    <urlset>
+      <script src="/static/app.js" />
+    </urlset>
+    """
+
+    assert _extract_script_urls(xml, "https://example.com/sitemap.xml") == [
+        "https://example.com/static/app.js",
+    ]
+
+
 def test_prioritize_alive_hosts_prefers_real_pages_over_404s() -> None:
     alive = [
         "https://missing.example.com",

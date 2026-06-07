@@ -15,11 +15,16 @@ authors = [
 ]
 
 keywords = [
-  "bugbounty",
-  "recon",
-  "pentest",
-  "security",
-  "nuclei"
+  "bug-bounty",
+  "reconnaissance",
+  "attack-surface",
+  "web-security",
+  "pentesting",
+  "security-research",
+  "osint",
+  "nuclei",
+  "subdomain-enumeration",
+  "endpoint-discovery"
 ]
 
 classifiers = [
