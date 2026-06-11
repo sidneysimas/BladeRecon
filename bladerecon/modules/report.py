@@ -1565,8 +1565,9 @@ def _render_markdown(context: dict, out_md: Path) -> None:
             lines.append(f"- Baseline safety net: {applied}, status {baseline.get('status', 'not_applicable')}, severity {baseline.get('severity', 'critical,high')}")
         templates_executed = metadata.get("templates_executed")
         templates_skipped = metadata.get("templates_skipped")
-        lines.append(f"- Templates executed: {templates_executed if templates_executed is not None else 'Incomplete / not recorded'}")
-        lines.append(f"- Templates skipped: {templates_skipped if templates_skipped is not None else 'Incomplete / not recorded'}")
+        skipped_label = "Preflight disabled" if metadata.get("template_count_preflight") is False else "Not recorded"
+        lines.append(f"- Templates executed: {templates_executed if templates_executed is not None else 'Not recorded'}")
+        lines.append(f"- Templates skipped: {templates_skipped if templates_skipped is not None else skipped_label}")
         lines.append(f"- Execution duration: {metadata.get('duration_seconds', 'Not recorded')}s")
         lines.append(f"- Findings count: {metadata.get('findings_count', context.get('nuclei_count', 0))}")
         lines.append("")

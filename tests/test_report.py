@@ -404,6 +404,46 @@ def test_report_prefers_latest_isolated_run_over_legacy_target_dir(tmp_path: Pat
     assert "run.example.com" in (run_dir / "reports" / "report.md").read_text(encoding="utf-8")
 
 
+def test_report_uses_newest_run_after_profile_sequence(tmp_path: Path) -> None:
+    runs = [
+        create_scan_run_output_dir(tmp_path, "example.com", "safe"),
+        create_scan_run_output_dir(tmp_path, "example.com", "balanced"),
+        create_scan_run_output_dir(tmp_path, "example.com", "aggressive"),
+        create_scan_run_output_dir(tmp_path, "example.com", "safe"),
+    ]
+    for index, run_dir in enumerate(runs):
+        (run_dir / "subdomains").mkdir()
+        (run_dir / "subdomains" / "subdomains.txt").write_text(f"run-{index}.example.com\n", encoding="utf-8")
+        (run_dir / "scan_state.json").write_text(
+            json.dumps({"scan_profile": "safe" if index in {0, 3} else "balanced" if index == 1 else "aggressive"}),
+            encoding="utf-8",
+        )
+
+    report.run("example.com", output=tmp_path)
+
+    assert (runs[-1] / "reports" / "report.md").exists()
+    assert "run-3.example.com" in (runs[-1] / "reports" / "report.md").read_text(encoding="utf-8")
+    assert not (runs[-2] / "reports" / "report.md").exists()
+
+
+def test_report_uses_newest_valid_run_when_latest_pointer_is_malformed(tmp_path: Path) -> None:
+    legacy_target = tmp_path / "example.com"
+    legacy_target.mkdir(parents=True)
+    first = create_scan_run_output_dir(tmp_path, "example.com", "safe")
+    newest = create_scan_run_output_dir(tmp_path, "example.com", "aggressive")
+    (first / "subdomains").mkdir()
+    (first / "subdomains" / "subdomains.txt").write_text("old.example.com\n", encoding="utf-8")
+    (newest / "subdomains").mkdir()
+    (newest / "subdomains" / "subdomains.txt").write_text("new.example.com\n", encoding="utf-8")
+    (legacy_target / "latest_run.json").write_text('{"path":"missing"}', encoding="utf-8")
+
+    report.run("example.com", output=tmp_path)
+
+    assert (newest / "reports" / "report.md").exists()
+    assert "new.example.com" in (newest / "reports" / "report.md").read_text(encoding="utf-8")
+    assert not (legacy_target / "reports" / "report.md").exists()
+
+
 def test_report_encodes_screenshot_paths_relative_to_report_dir(tmp_path: Path) -> None:
     target = tmp_path / "space.example"
     shot_dir = target / "screenshots"

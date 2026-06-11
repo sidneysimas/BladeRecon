@@ -192,8 +192,8 @@ docker run --rm -v "%cd%\results:/app/results" bladerecon full hackerone.com
 | `secrets` | `bladerecon secrets hackerone.com` | `results/hackerone.com/secrets/` |
 | `screenshot` | `bladerecon screenshot hackerone.com` | `results/hackerone.com/screenshots/` or skipped state |
 | `nuclei` | `bladerecon nuclei hackerone.com --profile balanced` | `results/hackerone.com/nuclei/` or skipped state |
-| `report` | `bladerecon report hackerone.com` | `results/hackerone.com/reports/` |
-| `full` | `bladerecon full hackerone.com --profile safe` | Standard workflow outputs with conservative active-request limits |
+| `report` | `bladerecon report hackerone.com` | Latest isolated full-run report, or legacy `results/hackerone.com/reports/` |
+| `full` | `bladerecon full hackerone.com --profile safe` | New isolated run under `results/hackerone.com/runs/<timestamp-profile-id>/` |
 | `doctor` | `bladerecon doctor` | Runtime dependency table |
 | `resume` | `bladerecon resume hackerone.com` | Resumes unfinished full workflow modules |
 | `cache info` | `bladerecon cache info` | Cache size, sources, and age |
@@ -239,7 +239,7 @@ bladerecon nuclei hackerone.com --profile safe
 bladerecon full hackerone.com --profile safe
 ```
 
-The active profile is written to `scan_state.json`, module metadata, and the HTML report.
+The active profile is written to the run marker, `scan_state.json`, module metadata, and the HTML report. `bladerecon resume <target>` resumes the latest isolated run and preserves that run's stored profile.
 
 Smart Nuclei keeps technology-guided tag selection, but it is no longer the
 only coverage layer. When tags are selected automatically, BladeRecon may run
@@ -259,82 +259,92 @@ layout.
 
 ## Output Structure
 
+Full scans are isolated by run. Each `bladerecon full <target>` creates a new
+folder under `results/<target>/runs/`, and `results/<target>/latest_run.json`
+points to the most recent valid run. `bladerecon report <target>` reads that
+latest valid run; if no isolated run exists, it falls back to the legacy flat
+`results/<target>/` layout used by individual module commands.
+
 ```text
 results/
 `-- example.com/
-    |-- scan_state.json
-    |-- subdomains/
-    |   |-- subdomains.txt
-    |   |-- subdomains.json
-    |   `-- subdomains.jsonl
-    |-- probe/
-    |   |-- alive.txt
-    |   |-- metadata.json
-    |   |-- probe.json
-    |   `-- probe.jsonl
-    |-- js/
-    |   |-- js_files.txt
-    |   |-- metadata.json
-    |   |-- js_files.json
-    |   `-- files/
-    |-- endpoints/
-    |   |-- endpoints.txt
-    |   |-- endpoints.json
-    |   `-- metadata.json
-    |-- secrets/
-    |   |-- secrets.txt
-    |   `-- secrets.json
-    |-- parameters/
-    |   |-- parameters.txt
-    |   |-- parameters.json
-    |   |-- parameters.jsonl
-    |   `-- parameters_from_urls.txt
-    |-- technology/
-    |   |-- technology.txt
-    |   `-- technology.json
-    |-- intelligence/
-    |   |-- attack_surface.json
-    |   |-- cloud_assets.json
-    |   |-- historical_dns.json
-    |   |-- infrastructure.json
-    |   |-- infrastructure_assets.json
-    |   |-- risk_score.json
-    |   `-- template_intelligence.json
-    |-- historical/
-    |   |-- urls.txt
-    |   |-- urls.json
-    |   |-- parameters.txt
-    |   |-- endpoints.txt
-    |   |-- endpoints.json
-    |   `-- metadata.json
-    |-- historical_js/
-    |   |-- js_urls.txt
-    |   |-- js_urls.json
-    |   |-- endpoints.txt
-    |   |-- endpoints.json
-    |   |-- parameters.txt
-    |   `-- metadata.json
-    |-- content_discovery/
-    |   |-- interesting_paths.txt
-    |   |-- interesting_paths.json
-    |   `-- metadata.json
-    |-- historical_diff.json
-    |-- security_headers_assets.json
-    |-- asset_priority.json
-    |-- advanced_metadata.json
-    |-- screenshots/
-    |-- nuclei/
-    |   |-- metadata.json
-    |   |-- results.json
-    |   |-- results.jsonl
-    |   `-- results.md
-    |-- reports/
-    |   |-- report.html
-    |   `-- report.md
-    `-- logs/
-        |-- scan.log
-        |-- errors.log
-        `-- scan_meta.json  # duration, performance, request/response counts
+    |-- latest_run.json
+    `-- runs/
+        `-- 20260611T121505Z-safe-ea0a5419/
+            |-- .bladerecon_run.json
+            |-- scan_state.json
+            |-- subdomains/
+            |   |-- subdomains.txt
+            |   |-- subdomains.json
+            |   `-- subdomains.jsonl
+            |-- probe/
+            |   |-- alive.txt
+            |   |-- metadata.json
+            |   |-- probe.json
+            |   `-- probe.jsonl
+            |-- js/
+            |   |-- js_files.txt
+            |   |-- metadata.json
+            |   |-- js_files.json
+            |   `-- files/
+            |-- endpoints/
+            |   |-- endpoints.txt
+            |   |-- endpoints.json
+            |   `-- metadata.json
+            |-- secrets/
+            |   |-- secrets.txt
+            |   `-- secrets.json
+            |-- parameters/
+            |   |-- parameters.txt
+            |   |-- parameters.json
+            |   |-- parameters.jsonl
+            |   `-- parameters_from_urls.txt
+            |-- technology/
+            |   |-- technology.txt
+            |   `-- technology.json
+            |-- intelligence/
+            |   |-- attack_surface.json
+            |   |-- cloud_assets.json
+            |   |-- historical_dns.json
+            |   |-- infrastructure.json
+            |   |-- infrastructure_assets.json
+            |   |-- risk_score.json
+            |   `-- template_intelligence.json
+            |-- historical/
+            |   |-- urls.txt
+            |   |-- urls.json
+            |   |-- parameters.txt
+            |   |-- endpoints.txt
+            |   |-- endpoints.json
+            |   `-- metadata.json
+            |-- historical_js/
+            |   |-- js_urls.txt
+            |   |-- js_urls.json
+            |   |-- endpoints.txt
+            |   |-- endpoints.json
+            |   |-- parameters.txt
+            |   `-- metadata.json
+            |-- content_discovery/
+            |   |-- interesting_paths.txt
+            |   |-- interesting_paths.json
+            |   `-- metadata.json
+            |-- historical_diff.json
+            |-- security_headers_assets.json
+            |-- asset_priority.json
+            |-- advanced_metadata.json
+            |-- screenshots/
+            |-- nuclei/
+            |   |-- metadata.json
+            |   |-- results.json
+            |   |-- results.jsonl
+            |   `-- results.md
+            |-- reports/
+            |   |-- report.html
+            |   `-- report.md
+            `-- logs/
+                |-- scan.log
+                |-- errors.log
+                `-- scan_meta.json
 ```
 
 ## Screenshots

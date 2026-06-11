@@ -356,6 +356,8 @@ def config_get(config: dict, dotted_key: str, default: Any = None) -> Any:
 def normalize_scan_profile(profile: Optional[str], config: Optional[dict] = None) -> str:
     """Return a supported scan safety profile name."""
     cfg = config or load_config()
+    if profile is not None and profile.__class__.__name__ == "OptionInfo":
+        profile = None
     value = str(profile or config_get(cfg, "scan_profile", "balanced") or "balanced").strip().lower()
     if value == "full":
         value = "aggressive"
@@ -577,7 +579,7 @@ def _run_marker_matches(marker: Path, target: str) -> bool:
 
 
 def _run_id(profile: str = "") -> str:
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
     profile_part = re.sub(r"[^A-Za-z0-9_.-]+", "-", str(profile or "").strip().lower()).strip("-")
     suffix = uuid.uuid4().hex[:8]
     return "-".join(part for part in (stamp, profile_part, suffix) if part)
@@ -611,6 +613,34 @@ def create_scan_run_output_dir(output: Path, target: str, profile: str = "") -> 
     return run_dir
 
 
+def _run_created_at(run_dir: Path) -> str:
+    marker = _read_json_file_silent(run_dir / RUN_MARKER_FILENAME)
+    if isinstance(marker, dict):
+        return str(marker.get("created_at") or marker.get("run_id") or run_dir.name)
+    return run_dir.name
+
+
+def _run_marker_mtime_ns(run_dir: Path) -> int:
+    try:
+        return (run_dir / RUN_MARKER_FILENAME).stat().st_mtime_ns
+    except Exception:
+        return 0
+
+
+def _iter_valid_run_dirs(target_root: Path, target: str) -> List[Path]:
+    runs_dir = target_root / "runs"
+    if not runs_dir.exists():
+        return []
+    valid = []
+    for candidate in runs_dir.iterdir():
+        if not candidate.is_dir():
+            continue
+        marker = candidate / RUN_MARKER_FILENAME
+        if _run_marker_matches(marker, target):
+            valid.append(candidate.resolve())
+    return sorted(valid, key=lambda path: (_run_created_at(path), _run_marker_mtime_ns(path), path.name), reverse=True)
+
+
 def resolve_latest_run_output_dir(output: Path, target: str) -> Path:
     """Return the latest isolated run directory, falling back to legacy output."""
     safe_target = normalize_target(target)
@@ -630,7 +660,25 @@ def resolve_latest_run_output_dir(output: Path, target: str) -> Path:
                     return run_dir
             except Exception:
                 pass
+    valid_runs = _iter_valid_run_dirs(target_root, safe_target)
+    if valid_runs:
+        return valid_runs[0]
     return target_output_dir(output, safe_target)
+
+
+def resolve_scan_run_profile(output: Path, target: str) -> str:
+    """Return the original profile for the latest run, preferring the run marker."""
+    run_dir = resolve_latest_run_output_dir(output, target)
+    config = load_config()
+    marker = _read_json_file_silent(run_dir / RUN_MARKER_FILENAME)
+    if isinstance(marker, dict) and marker.get("profile"):
+        return normalize_scan_profile(str(marker.get("profile")), config)
+    state = _read_json_file_silent(run_dir / "scan_state.json")
+    if isinstance(state, dict):
+        state_profile = state.get("scan_profile")
+        if state_profile:
+            return normalize_scan_profile(str(state_profile), config)
+    return normalize_scan_profile(None, config)
 
 
 def clear_module_output(output: Path, target: str, module_name: str) -> None:

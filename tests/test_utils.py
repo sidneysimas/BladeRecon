@@ -73,6 +73,51 @@ def test_scan_run_output_dirs_are_isolated_and_latest_resolves(tmp_path: Path) -
     assert utils.target_output_dir(tmp_path, "example.com") == (tmp_path / "example.com").resolve()
 
 
+def test_latest_run_resolution_falls_back_to_newest_valid_run_when_pointer_is_malformed(tmp_path: Path) -> None:
+    first = utils.create_scan_run_output_dir(tmp_path, "example.com", "safe")
+    second = utils.create_scan_run_output_dir(tmp_path, "example.com", "balanced")
+    third = utils.create_scan_run_output_dir(tmp_path, "example.com", "aggressive")
+    malformed = tmp_path / "example.com" / "runs" / "99999999T999999Z-safe-bad"
+    malformed.mkdir()
+    (tmp_path / "example.com" / utils.LATEST_RUN_FILENAME).write_text('{"path":"missing"}', encoding="utf-8")
+
+    assert utils.resolve_latest_run_output_dir(tmp_path, "example.com") == third
+    assert first != second != third
+
+
+def test_latest_run_resolution_rejects_cross_target_pointer(tmp_path: Path) -> None:
+    safe_run = utils.create_scan_run_output_dir(tmp_path, "example.com", "safe")
+    other_run = utils.create_scan_run_output_dir(tmp_path, "other.example", "aggressive")
+    (tmp_path / "example.com" / utils.LATEST_RUN_FILENAME).write_text(
+        '{"path":"' + str(other_run).replace("\\", "\\\\") + '"}',
+        encoding="utf-8",
+    )
+
+    assert utils.resolve_latest_run_output_dir(tmp_path, "example.com") == safe_run
+
+
+def test_resolve_scan_run_profile_prefers_run_marker_then_legacy_scan_state(tmp_path: Path) -> None:
+    run_dir = utils.create_scan_run_output_dir(tmp_path, "example.com", "aggressive")
+
+    assert utils.resolve_scan_run_profile(tmp_path, "example.com") == "aggressive"
+
+    (run_dir / "scan_state.json").write_text('{"scan_profile":"safe"}', encoding="utf-8")
+
+    assert utils.resolve_scan_run_profile(tmp_path, "example.com") == "aggressive"
+
+    (run_dir / utils.RUN_MARKER_FILENAME).unlink()
+    (tmp_path / "example.com" / "scan_state.json").write_text('{"scan_profile":"safe"}', encoding="utf-8")
+
+    assert utils.resolve_scan_run_profile(tmp_path, "example.com") == "safe"
+
+
+def test_normalize_scan_profile_treats_typer_optioninfo_as_missing() -> None:
+    class OptionInfo:
+        pass
+
+    assert utils.normalize_scan_profile(OptionInfo()) == "balanced"
+
+
 def test_scan_state_tracks_completed_and_failed_modules(tmp_path: Path) -> None:
     utils.update_scan_state("example.com", tmp_path, "probe", "completed", 1.25)
     utils.update_scan_state("example.com", tmp_path, "nuclei", "failed", 0.5, "missing binary")

@@ -2,8 +2,9 @@ import json
 import subprocess
 from types import SimpleNamespace
 
-from bladerecon.main import _bootstrap_nuclei_templates, _collect_summary, _collect_traffic_counts, _command_output, _custom_templates_available
+from bladerecon.main import _bootstrap_nuclei_templates, _collect_summary, _collect_traffic_counts, _command_output, _custom_templates_available, resume
 from bladerecon.modules import nuclei
+from bladerecon.modules.utils import create_scan_run_output_dir
 
 
 def test_collect_summary_marks_template_unavailable_nuclei_as_skipped(tmp_path):
@@ -26,6 +27,22 @@ def test_collect_summary_marks_absent_nuclei_as_not_run(tmp_path):
     summary = _collect_summary("example.com", tmp_path, "1.00s")
 
     assert summary["Nuclei Findings"] == "Not Run"
+
+
+def test_resume_preserves_latest_run_profile(tmp_path, monkeypatch):
+    run_dir = create_scan_run_output_dir(tmp_path, "example.com", "safe")
+    (run_dir / "scan_state.json").write_text('{"scan_profile":"safe","completed_modules":[]}', encoding="utf-8")
+    calls = []
+
+    def fake_full(**kwargs):
+        calls.append(kwargs)
+
+    monkeypatch.setattr("bladerecon.main.full", fake_full)
+
+    resume(domain="example.com", domain_option=None, output=tmp_path)
+
+    assert calls[0]["resume_mode"] is True
+    assert calls[0]["profile"] == "safe"
 
 
 def test_collect_traffic_counts_includes_module_metadata(tmp_path):

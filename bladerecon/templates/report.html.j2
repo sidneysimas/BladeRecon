@@ -860,8 +860,8 @@
           {% if nuclei_metadata %}
           <div class="grid intel-grid">
             <div class="intel-item"><span class="intel-value">{{ nuclei_metadata.get("coverage_status", "completed" if nuclei_metadata.get("status") == "completed" else nuclei_metadata.get("status", "Not recorded")) }}</span><span class="intel-label">Coverage Status</span></div>
-            <div class="intel-item"><span class="intel-value">{{ nuclei_metadata.get("templates_executed") if nuclei_metadata.get("templates_executed") is not none else "Incomplete" }}</span><span class="intel-label">Templates Executed</span></div>
-            <div class="intel-item"><span class="intel-value">{{ nuclei_metadata.get("templates_skipped") if nuclei_metadata.get("templates_skipped") is not none else "Incomplete" }}</span><span class="intel-label">Templates Skipped</span></div>
+            <div class="intel-item"><span class="intel-value">{{ nuclei_metadata.get("templates_executed") if nuclei_metadata.get("templates_executed") is not none else "Not recorded" }}</span><span class="intel-label">Templates Executed</span></div>
+            <div class="intel-item"><span class="intel-value">{{ nuclei_metadata.get("templates_skipped") if nuclei_metadata.get("templates_skipped") is not none else ("Preflight disabled" if nuclei_metadata.get("template_count_preflight") is sameas false else "Not recorded") }}</span><span class="intel-label">Templates Skipped</span></div>
             <div class="intel-item"><span class="intel-value">{{ nuclei_metadata.get("duration_seconds", "Not recorded") }}s</span><span class="intel-label">Nuclei Duration</span></div>
             <div class="intel-item"><span class="intel-value">{{ nuclei_metadata.get("findings_count", nuclei_count) }}</span><span class="intel-label">Findings Count</span></div>
           </div>

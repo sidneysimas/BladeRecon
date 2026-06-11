@@ -1583,7 +1583,7 @@ def run(
                 "Automatic Scan": "on" if automatic_scan else "off",
                 "Selection Reason": selection_reason,
                 "Coverage Strategy": "Smart + baseline" if baseline_needed else selection_reason,
-                "Templates Matched": template_candidates if template_candidates is not None else "Unknown",
+                "Templates Matched": template_candidates if template_candidates is not None else "Preflight disabled",
                 "Templates Executed": templates_executed if templates_executed is not None else "Not Run",
                 "Templates Skipped": templates_skipped if templates_skipped is not None else "Not Run",
                 "Targets": target_count,

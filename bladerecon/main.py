@@ -55,6 +55,7 @@ from .modules.utils import (
     scan_state_path,
     skip,
     resolve_latest_run_output_dir,
+    resolve_scan_run_profile,
     save_scan_state,
     success,
     target_output_dir,
@@ -1193,6 +1194,7 @@ def resume(
 ) -> None:
     """Resume a full scan by skipping modules completed in scan_state.json."""
     resolved_domain = _require_domain("resume", domain, domain_option)
+    active_profile = resolve_scan_run_profile(output, resolved_domain)
     full(
         domain=resolved_domain,
         output=output,
@@ -1202,6 +1204,7 @@ def resume(
         proxy=None,
         user_agent=None,
         random_user_agent=False,
+        profile=active_profile,
     )
 
 

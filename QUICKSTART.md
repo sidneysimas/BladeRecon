@@ -96,16 +96,20 @@ bladerecon report hackerone.com
 Reports are saved to:
 
 ```text
-results/hackerone.com/reports/report.html
-results/hackerone.com/reports/report.md
+results/hackerone.com/runs/<latest-run-id>/reports/report.html
+results/hackerone.com/runs/<latest-run-id>/reports/report.md
 ```
+
+BladeRecon also writes `results/hackerone.com/latest_run.json`, which points
+to the newest valid full-scan run. Individual module commands still write to
+the legacy flat `results/hackerone.com/<module>/` folders.
 
 ## 5. Open Report
 
 Open:
 
 ```text
-results/hackerone.com/reports/report.html
+results/hackerone.com/runs/<latest-run-id>/reports/report.html
 ```
 
 The report is offline and includes:
