@@ -491,3 +491,33 @@ def test_report_shows_template_unavailable_nuclei_as_skipped(tmp_path: Path) -> 
 
     md = (target / "reports" / "report.md").read_text(encoding="utf-8")
     assert "- Vulnerabilities (nuclei findings): Skipped (templates unavailable)" in md
+
+
+def test_report_shows_metadata_only_nuclei_timeout_as_incomplete_coverage(tmp_path: Path) -> None:
+    target = tmp_path / "timeout.example"
+    (target / "nuclei").mkdir(parents=True)
+    (target / "nuclei" / "metadata.json").write_text(
+        json.dumps(
+            {
+                "status": "timed_out",
+                "coverage_status": "incomplete_timeout",
+                "timeout_seconds": 7,
+                "incomplete_reason": "nuclei timed out after 7s before coverage could be trusted",
+                "coverage_strategy": "baseline_only",
+                "templates_executed": None,
+                "templates_skipped": None,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    report.run("timeout.example", output=tmp_path)
+
+    html = (target / "reports" / "report.html").read_text(encoding="utf-8")
+    md = (target / "reports" / "report.md").read_text(encoding="utf-8")
+    assert "Timed Out" in html
+    assert "Coverage is incomplete" in html
+    assert "zero findings should not be interpreted as clean validation" in html
+    assert "- Vulnerabilities (nuclei findings): Timed Out" in md
+    assert "- Coverage status: incomplete_timeout" in md
+    assert "- Timeout: coverage incomplete after 7s" in md

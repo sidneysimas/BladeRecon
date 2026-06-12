@@ -821,13 +821,23 @@ async def collect_historical_js(target: str, output: Path, config: dict, profile
         await asyncio.gather(*(fetch(url) for url in js_urls), return_exceptions=True)
 
     endpoint_rows = sorted({row["endpoint"].lower(): row for row in endpoint_rows}.values(), key=lambda item: item["endpoint"])
-    secret_rows = sorted({(row["type"], row["value"], row["source"]): row for row in secret_rows}.values(), key=lambda item: (item["type"], item["source"]))
+    secret_rows = sorted(
+        {
+            (
+                row.get("type", ""),
+                row.get("value_fingerprint") or row.get("value_preview") or "",
+                row.get("source", ""),
+            ): row
+            for row in secret_rows
+        }.values(),
+        key=lambda item: (item["type"], item["source"]),
+    )
     atomic_write_text(out_dir / "js_urls.txt", "\n".join(js_urls), encoding="utf-8")
     atomic_write_text(out_dir / "endpoints.txt", "\n".join(row["endpoint"] for row in endpoint_rows), encoding="utf-8")
     atomic_write_text(out_dir / "parameters.txt", "\n".join(sorted(parameter_set, key=str.lower)), encoding="utf-8")
     atomic_write_text(
         out_dir / "secrets.txt",
-        "\n".join(f"{row['type']} [{row.get('confidence', 'LOW')}]: {row.get('value_preview') or row['value']} ({row['source']})" for row in secret_rows),
+        "\n".join(f"{row['type']} [{row.get('confidence', 'LOW')}]: {row.get('value_preview', '[redacted]')} ({row['source']})" for row in secret_rows),
         encoding="utf-8",
     )
     write_json(out_dir / "js_urls.json", [{"url": url, "sources": sorted(js_refs.get(url, []))} for url in js_urls])

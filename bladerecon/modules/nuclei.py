@@ -277,6 +277,31 @@ def _write_nuclei_skip_artifacts(out_dir: Path, metadata: Dict[str, object]) -> 
     write_json(out_dir / "metadata.json", metadata)
 
 
+def _write_nuclei_timeout_artifacts(out_dir: Path, metadata: Dict[str, object]) -> None:
+    write_json(out_dir / "results.json", [])
+    atomic_write_text(out_dir / "results.jsonl", "", encoding="utf-8")
+    timeout = metadata.get("timeout_seconds", "the configured timeout")
+    reason = metadata.get("incomplete_reason") or f"nuclei timed out after {timeout}s before coverage could be trusted"
+    atomic_write_text(
+        out_dir / "results.md",
+        "\n".join(
+            [
+                "# Nuclei Results",
+                "",
+                "Status: Timed out",
+                "",
+                "Coverage is incomplete. Zero findings must not be interpreted as clean validation.",
+                "",
+                f"Timeout: {timeout}s",
+                f"Incomplete reason: {reason}",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    write_json(out_dir / "metadata.json", metadata)
+
+
 def _load_template_target_hosts(output: Path, target_name: str, selected_tags: List[str]) -> Tuple[List[str], List[str]]:
     if not selected_tags:
         return [], []
@@ -1614,58 +1639,56 @@ def run(
         effective_timeout = module_timeout or get_timeout("nuclei", 300)
         log.error("nuclei timed out after %d seconds", effective_timeout)
         duration = time.perf_counter() - started
-        write_json(
-            out_dir / "metadata.json",
-            {
-                "profile": profile,
-                "severity": resolved_severity,
-                "exclude_tags": resolved_exclude_tags,
-                "automatic_scan": automatic_scan,
-                "baseline_only": baseline_only if "baseline_only" in locals() else False,
-                "selected_tags_requested": selected_tags_requested,
-                "selected_tags": selected_tags,
-                "selection_reason": selection_reason,
-                "coverage_strategy": "smart_tags_plus_lightweight_baseline" if "baseline_needed" in locals() and baseline_needed else "baseline_only" if "baseline_only" in locals() and baseline_only else selection_reason,
-                "coverage_status": "incomplete_timeout",
-                "tag_fallback_reason": tag_fallback_reason,
-                "roi_decision": roi_decision if "roi_decision" in locals() else {"run": True, "reason": "not evaluated before timeout"},
-                "baseline_reason": baseline_reason if "baseline_reason" in locals() else "not evaluated",
-                "baseline_skip_reason": baseline_skip_reason if "baseline_skip_reason" in locals() else "",
-                "baseline_roi": baseline_roi if "baseline_roi" in locals() else {"run": False, "reason": "not evaluated", "targets": []},
-                "baseline_targets": baseline_roi.get("targets", []) if "baseline_roi" in locals() and isinstance(baseline_roi, dict) else [],
-                "target_scope": target_scope if "target_scope" in locals() else None,
-                "template_candidates": template_candidates if "template_candidates" in locals() else None,
-                "baseline_scan": {
-                    "enabled": baseline_enabled if "baseline_enabled" in locals() else bool(config_get(config, "nuclei.baseline_scan.enabled", True)),
-                    "applied": baseline_needed if "baseline_needed" in locals() else False,
-                    "status": "timed_out" if "baseline_needed" in locals() and baseline_needed else "not_applicable",
-                    "reason": baseline_reason if "baseline_reason" in locals() else "not evaluated",
-                    "skip_reason": baseline_skip_reason if "baseline_skip_reason" in locals() else "",
-                    "roi": baseline_roi if "baseline_roi" in locals() else {"run": False, "reason": "not evaluated", "targets": []},
-                    "targets": baseline_roi.get("targets", []) if "baseline_roi" in locals() and isinstance(baseline_roi, dict) else [],
-                    "severity": baseline_severity if "baseline_severity" in locals() else str(config_get(config, "nuclei.baseline_scan.severity", "critical,high") or "critical,high"),
-                    "tags": baseline_tags if "baseline_tags" in locals() else str(config_get(config, "nuclei.baseline_scan.tags", "cve,exposure,misconfig") or ""),
-                    "max_targets": baseline_max_targets if "baseline_max_targets" in locals() else int(config_get(config, "nuclei.baseline_scan.max_targets", 50) or 0),
-                    "template_candidates": baseline_template_candidates if "baseline_template_candidates" in locals() else None,
-                    "templates_executed": None,
-                    "targets_count": baseline_target_count if "baseline_target_count" in locals() and baseline_needed else 0,
-                    "duration_seconds": 0,
-                },
-                "targets_count": target_count if "target_count" in locals() else None,
-                "rate_limit": resolved_rate,
-                "concurrency": resolved_concurrency,
-                "request_timeout": config_get(config, "nuclei.request_timeout", 8),
-                "retries": config_get(config, "nuclei.retries", 0),
-                "duration_seconds": round(duration, 2),
-                "timeout_seconds": effective_timeout,
-                "status": "timed_out",
-                "findings_count": 0,
+        metadata = {
+            "profile": profile,
+            "severity": resolved_severity,
+            "exclude_tags": resolved_exclude_tags,
+            "automatic_scan": automatic_scan,
+            "baseline_only": baseline_only if "baseline_only" in locals() else False,
+            "selected_tags_requested": selected_tags_requested,
+            "selected_tags": selected_tags,
+            "selection_reason": selection_reason,
+            "coverage_strategy": "smart_tags_plus_lightweight_baseline" if "baseline_needed" in locals() and baseline_needed else "baseline_only" if "baseline_only" in locals() and baseline_only else selection_reason,
+            "coverage_status": "incomplete_timeout",
+            "tag_fallback_reason": tag_fallback_reason,
+            "roi_decision": roi_decision if "roi_decision" in locals() else {"run": True, "reason": "not evaluated before timeout"},
+            "baseline_reason": baseline_reason if "baseline_reason" in locals() else "not evaluated",
+            "baseline_skip_reason": baseline_skip_reason if "baseline_skip_reason" in locals() else "",
+            "baseline_roi": baseline_roi if "baseline_roi" in locals() else {"run": False, "reason": "not evaluated", "targets": []},
+            "baseline_targets": baseline_roi.get("targets", []) if "baseline_roi" in locals() and isinstance(baseline_roi, dict) else [],
+            "target_scope": target_scope if "target_scope" in locals() else None,
+            "template_candidates": template_candidates if "template_candidates" in locals() else None,
+            "baseline_scan": {
+                "enabled": baseline_enabled if "baseline_enabled" in locals() else bool(config_get(config, "nuclei.baseline_scan.enabled", True)),
+                "applied": baseline_needed if "baseline_needed" in locals() else False,
+                "status": "timed_out" if "baseline_needed" in locals() and baseline_needed else "not_applicable",
+                "reason": baseline_reason if "baseline_reason" in locals() else "not evaluated",
+                "skip_reason": baseline_skip_reason if "baseline_skip_reason" in locals() else "",
+                "roi": baseline_roi if "baseline_roi" in locals() else {"run": False, "reason": "not evaluated", "targets": []},
+                "targets": baseline_roi.get("targets", []) if "baseline_roi" in locals() and isinstance(baseline_roi, dict) else [],
+                "severity": baseline_severity if "baseline_severity" in locals() else str(config_get(config, "nuclei.baseline_scan.severity", "critical,high") or "critical,high"),
+                "tags": baseline_tags if "baseline_tags" in locals() else str(config_get(config, "nuclei.baseline_scan.tags", "cve,exposure,misconfig") or ""),
+                "max_targets": baseline_max_targets if "baseline_max_targets" in locals() else int(config_get(config, "nuclei.baseline_scan.max_targets", 50) or 0),
+                "template_candidates": baseline_template_candidates if "baseline_template_candidates" in locals() else None,
                 "templates_executed": None,
-                "templates_skipped": None,
-                "incomplete_reason": f"nuclei timed out after {effective_timeout}s before coverage could be trusted",
-                "command": cmd,
+                "targets_count": baseline_target_count if "baseline_target_count" in locals() and baseline_needed else 0,
+                "duration_seconds": 0,
             },
-        )
+            "targets_count": target_count if "target_count" in locals() else None,
+            "rate_limit": resolved_rate,
+            "concurrency": resolved_concurrency,
+            "request_timeout": config_get(config, "nuclei.request_timeout", 8),
+            "retries": config_get(config, "nuclei.retries", 0),
+            "duration_seconds": round(duration, 2),
+            "timeout_seconds": effective_timeout,
+            "status": "timed_out",
+            "findings_count": 0,
+            "templates_executed": None,
+            "templates_skipped": None,
+            "incomplete_reason": f"nuclei timed out after {effective_timeout}s before coverage could be trusted",
+            "command": cmd,
+        }
+        _write_nuclei_timeout_artifacts(out_dir, metadata)
         warn(f"nuclei timed out after {effective_timeout}s; continuing")
         return ModuleResult(status="timed_out", reason=f"timeout after {effective_timeout}s")
     except Exception as exc:

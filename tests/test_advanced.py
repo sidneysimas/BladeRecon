@@ -1,3 +1,4 @@
+import asyncio
 import json
 from pathlib import Path
 
@@ -110,3 +111,31 @@ def test_historical_source_roi_reports_signal_per_source() -> None:
     assert by_source["commoncrawl"]["opportunities_per_second"] == 0.5
     assert by_source["wayback"]["selected_urls"] == 2
     assert by_source["wayback"]["signal_to_noise_ratio"] == 0.5
+
+
+def test_historical_js_secrets_are_redacted_in_artifacts(tmp_path: Path) -> None:
+    raw_secret = "Bearer abcdefghijklmnopqrstuvwxyz123456"
+    target = tmp_path / "example.com"
+    (target / "historical").mkdir(parents=True)
+    (target / "js" / "files").mkdir(parents=True)
+    (target / "historical" / "urls.txt").write_text("", encoding="utf-8")
+    (target / "js" / "files" / "app.js").write_text(f'const token = "{raw_secret}";', encoding="utf-8")
+    (target / "js" / "js_files.json").write_text(
+        json.dumps([{"url": "https://static.example.com/app.js", "local_path": "js/files/app.js"}]),
+        encoding="utf-8",
+    )
+
+    metadata, requests = asyncio.run(
+        advanced.collect_historical_js("example.com", tmp_path, {"advanced": {"historical_js": {"max_files": 10}}}, "safe")
+    )
+    secret_json = (target / "historical_js" / "secrets.json").read_text(encoding="utf-8")
+    secret_text = (target / "historical_js" / "secrets.txt").read_text(encoding="utf-8")
+    rows = json.loads(secret_json)
+
+    assert requests == 0
+    assert metadata["secrets"] == 1
+    assert raw_secret not in secret_json
+    assert raw_secret not in secret_text
+    assert "value" not in rows[0]
+    assert rows[0]["value_preview"]
+    assert rows[0]["value_fingerprint"]

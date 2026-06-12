@@ -444,6 +444,24 @@ def test_nuclei_normalizes_bom_target_lists(tmp_path):
     assert normalized.read_bytes().startswith(b"http://127.0.0.1")
 
 
+def test_nuclei_timeout_artifacts_do_not_look_like_clean_zero_findings(tmp_path):
+    metadata = {
+        "status": "timed_out",
+        "coverage_status": "incomplete_timeout",
+        "timeout_seconds": 3,
+        "incomplete_reason": "nuclei timed out after 3s before coverage could be trusted",
+    }
+
+    nuclei._write_nuclei_timeout_artifacts(tmp_path, metadata)
+
+    assert json.loads((tmp_path / "results.json").read_text(encoding="utf-8")) == []
+    assert (tmp_path / "results.jsonl").read_text(encoding="utf-8") == ""
+    markdown = (tmp_path / "results.md").read_text(encoding="utf-8")
+    assert "Status: Timed out" in markdown
+    assert "Zero findings must not be interpreted as clean validation" in markdown
+    assert json.loads((tmp_path / "metadata.json").read_text(encoding="utf-8"))["coverage_status"] == "incomplete_timeout"
+
+
 def test_nuclei_scopes_intelligence_tags_to_matching_hosts(tmp_path):
     target = tmp_path / "example.com"
     alive = target / "probe" / "alive.txt"

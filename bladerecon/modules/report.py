@@ -1626,17 +1626,19 @@ def run(target: str, output: Path = Path("results"), scan_duration: Optional[str
     endpoints = _load_endpoints(target_dir)
     secrets = _load_secrets(target_dir)
     screenshots_available = (target_dir / "screenshots").exists()
+    nuclei_metadata = _load_nuclei_metadata(target_dir)
+    nuclei_metadata_status = str(nuclei_metadata.get("status") or nuclei_metadata.get("coverage_status") or "").lower()
+    nuclei_metadata_timeout = nuclei_metadata_status == "timed_out" or nuclei_metadata_status == "incomplete_timeout"
     nuclei_available = (target_dir / "nuclei" / "results.jsonl").exists() or (target_dir / "nuclei" / "results.json").exists()
-    nuclei_skipped_reason = "" if nuclei_available or _nuclei_binary_available() else "Binary not installed"
+    nuclei_skipped_reason = "" if nuclei_available or nuclei_metadata_timeout or _nuclei_binary_available() else "Binary not installed"
     nuclei_state_status = "skipped" if nuclei_skipped_reason else ""
     nuclei_status_label = "Skipped"
-    if not nuclei_available and not nuclei_skipped_reason and not nuclei_template_status()["ok"]:
+    if not nuclei_available and not nuclei_skipped_reason and not nuclei_metadata_timeout and not nuclei_template_status()["ok"]:
         nuclei_skipped_reason = "templates unavailable. Run: nuclei -ut"
         nuclei_state_status = "skipped"
     screenshots = _load_screenshots(target_dir)
     screenshot_failures = _load_screenshot_failures(target_dir)
     nuclei_findings = _load_nuclei_findings(target_dir)
-    nuclei_metadata = _load_nuclei_metadata(target_dir)
     infrastructure = _load_intelligence_file(target_dir, "infrastructure.json", {})
     cloud_assets = _load_intelligence_file(target_dir, "cloud_assets.json", [])
     historical_dns = _load_intelligence_file(target_dir, "historical_dns.json", {})
@@ -1701,11 +1703,20 @@ def run(target: str, output: Path = Path("results"), scan_duration: Optional[str
             screenshots_skipped_reason = _normalize_skip_reason(chromium_detail)
     if isinstance(nuclei_state, dict) and nuclei_state.get("status") in {"skipped", "failed", "timed_out"}:
         nuclei_state_status = str(nuclei_state.get("status") or "skipped")
-        nuclei_status_label = nuclei_state_status.title()
+        nuclei_status_label = _status_label(nuclei_state_status)
         nuclei_skipped_reason = _normalize_skip_reason(str(nuclei_state.get("error") or "Missing Dependency"))
         if "templates unavailable" in nuclei_skipped_reason.lower():
             nuclei_state_status = "skipped"
             nuclei_status_label = "Skipped"
+    elif nuclei_metadata_timeout:
+        nuclei_state_status = "timed_out"
+        nuclei_status_label = "Timed Out"
+        nuclei_skipped_reason = _normalize_skip_reason(
+            str(
+                nuclei_metadata.get("incomplete_reason")
+                or f"timeout after {nuclei_metadata.get('timeout_seconds', 'configured timeout')}s"
+            )
+        )
 
     live_status: Dict[str, bool] = {}
     if subdomains and not alive_hosts:

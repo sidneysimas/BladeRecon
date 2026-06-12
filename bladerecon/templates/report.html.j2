@@ -833,9 +833,12 @@
           {% if nuclei_skipped_reason %}
           <div class="card status-card">
             <span class="badge medium">Nuclei Status</span>
-            <span class="metric-number status-number">Skipped</span>
+            <span class="metric-number status-number">{{ nuclei_status_label }}</span>
             <span class="metric-label">Reason: {{ nuclei_skipped_reason }}</span>
           </div>
+          {% if nuclei_metadata.get("status") == "timed_out" or nuclei_metadata.get("coverage_status") == "incomplete_timeout" %}
+          <div class="note" style="margin-top: 12px;">Nuclei timed out after {{ nuclei_metadata.get("timeout_seconds", "the configured timeout") }}s. Coverage is incomplete, so zero findings should not be interpreted as clean validation.</div>
+          {% endif %}
           {% else %}
           <div class="severity-chart" aria-label="Severity distribution chart">
             <div class="severity-track">
