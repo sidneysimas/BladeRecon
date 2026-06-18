@@ -34,7 +34,7 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 from rich.console import Console
 
 from .. import __version__
-from .utils import REPORT_VERSION, RUN_MARKER_FILENAME, atomic_write_text, check_playwright_chromium, deduplicate_alive_urls, deduplicate_parameters, deduplicate_subdomains, dependency_health, info, nuclei_template_status, print_module_summary, resolve_latest_run_output_dir, setup_logging, success, target_output_dir, warn
+from .utils import REPORT_VERSION, RUN_MARKER_FILENAME, atomic_write_text, check_playwright_chromium, deduplicate_alive_urls, deduplicate_parameters, deduplicate_subdomains, dependency_health, info, normalize_scan_profile, nuclei_template_status, print_module_summary, resolve_latest_run_output_dir, setup_logging, success, target_output_dir, warn
 
 console = Console()
 
@@ -772,6 +772,17 @@ def _load_scan_state(target_dir: Path) -> dict:
         return {}
 
 
+def _load_run_marker(target_dir: Path) -> dict:
+    f = target_dir / RUN_MARKER_FILENAME
+    if not f.exists():
+        return {}
+    try:
+        data = json.loads(f.read_text(encoding="utf-8-sig"))
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
 def _asset_data_uri(path: Path, max_bytes: int = 2_500_000) -> str:
     if not path.exists() or not path.is_file():
         return ""
@@ -846,6 +857,64 @@ def _display_time(value: object) -> str:
         return raw
 
 
+def _duration_seconds(value: object) -> Optional[float]:
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    raw = str(value).strip().lower()
+    if not raw or raw == "not recorded":
+        return None
+    match = re.fullmatch(r"([0-9]+(?:\.[0-9]+)?)s?", raw)
+    if match:
+        return float(match.group(1))
+    return None
+
+
+def _format_scan_duration(seconds: float) -> str:
+    return f"{round(max(0.0, seconds), 2):.2f}s"
+
+
+def _module_total_duration(scan_state: dict) -> float:
+    modules = scan_state.get("modules", {}) if isinstance(scan_state, dict) else {}
+    total = 0.0
+    if not isinstance(modules, dict):
+        return total
+    for name, state in modules.items():
+        if name == "report" or not isinstance(state, dict):
+            continue
+        try:
+            total += float(state.get("duration_seconds") or 0.0)
+        except (TypeError, ValueError):
+            continue
+    return round(total, 2)
+
+
+def _scan_duration(scan_meta: dict, scan_state: dict, provided_duration: Optional[str] = None) -> str:
+    meta_seconds = _duration_seconds(scan_meta.get("duration_seconds")) if isinstance(scan_meta, dict) else None
+    meta_human = str(scan_meta.get("duration_human") or "").strip() if isinstance(scan_meta, dict) else ""
+    human_seconds = _duration_seconds(meta_human)
+    provided_seconds = _duration_seconds(provided_duration)
+    module_total = _module_total_duration(scan_state)
+    seconds = meta_seconds if meta_seconds is not None else human_seconds
+    if seconds is None:
+        seconds = provided_seconds
+    if module_total > 0 and (seconds is None or seconds + 1.0 < module_total):
+        seconds = module_total
+    if seconds is not None:
+        return _format_scan_duration(seconds)
+    return meta_human or provided_duration or "Not recorded"
+
+
+def _authoritative_scan_profile(target_dir: Path, scan_state: dict) -> str:
+    marker = _load_run_marker(target_dir)
+    if marker.get("profile"):
+        return normalize_scan_profile(str(marker.get("profile"))).title()
+    if isinstance(scan_state, dict) and scan_state.get("scan_profile"):
+        return normalize_scan_profile(str(scan_state.get("scan_profile"))).title()
+    return "Balanced"
+
+
 def _build_performance(scan_meta: dict, scan_state: dict, target_dir: Path) -> Dict[str, object]:
     modules = scan_state.get("modules", {}) if isinstance(scan_state, dict) else {}
     performance = scan_meta.get("performance", {}) if isinstance(scan_meta, dict) else {}
@@ -878,7 +947,7 @@ def _build_performance(scan_meta: dict, scan_state: dict, target_dir: Path) -> D
         "scan_start_time_raw": scan_start_raw,
         "scan_end_time": _display_time(scan_end_raw),
         "scan_end_time_raw": scan_end_raw,
-        "total_duration": scan_meta.get("duration_human", "Not recorded"),
+        "total_duration": _scan_duration(scan_meta, scan_state),
         "peak_ram_mb": round(float(performance.get("peak_ram_mb") or 0.0), 2) if isinstance(performance, dict) else 0.0,
         "average_ram_mb": round(float(performance.get("average_ram_mb") or 0.0), 2) if isinstance(performance, dict) else 0.0,
         "peak_cpu_percent": round(float(performance.get("peak_cpu_percent") or 0.0), 2) if isinstance(performance, dict) else 0.0,
@@ -1231,6 +1300,7 @@ def _render_markdown(context: dict, out_md: Path) -> None:
     lines.append(f"- Screenshots: {context.get('screenshots_status', len(context.get('screenshots', [])))}")
     md_vulns = sum(len(v) for v in context.get('nuclei', {}).values())
     lines.append(f"- Vulnerabilities (nuclei findings): {context.get('nuclei_status', md_vulns)}")
+    lines.append(f"- Scan profile: {context.get('scan_profile', 'Balanced')}")
     if context.get("scan_duration"):
         lines.append(f"- Scan duration: {context.get('scan_duration')}")
     lines.append("")
@@ -1748,7 +1818,7 @@ def run(target: str, output: Path = Path("results"), scan_duration: Optional[str
         "version": __version__,
         "report_version": str(scan_state.get("report_version") or REPORT_VERSION),
         "framework_version": str(scan_state.get("framework_version") or __version__),
-        "scan_profile": str(scan_state.get("scan_profile") or "balanced").title(),
+        "scan_profile": _authoritative_scan_profile(target_dir, scan_state),
         "timestamp": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
         "subdomains": subdomains,
         "subdomain_sources": subdomain_sources,
@@ -1798,7 +1868,7 @@ def run(target: str, output: Path = Path("results"), scan_duration: Optional[str
         "nuclei_status_label": nuclei_status_label,
         "nuclei_status": nuclei_status,
         "nuclei_severity_counts": {sev: len(nuclei_grouped.get(sev, [])) for sev in ("critical", "high", "medium", "low", "info", "unknown")},
-        "scan_duration": scan_duration or scan_meta.get("duration_human", "Not recorded"),
+        "scan_duration": _scan_duration(scan_meta, scan_state, scan_duration),
         "performance": performance,
         "report_logo_data_uri": _asset_data_uri(PACKAGE_ASSET_DIR / "report-logo.png") or _asset_data_uri(PROJECT_ROOT / "assets" / "report-logo.png"),
         "probe_results": probe_results,

@@ -359,6 +359,8 @@ def normalize_scan_profile(profile: Optional[str], config: Optional[dict] = None
     if profile is not None and profile.__class__.__name__ == "OptionInfo":
         profile = None
     value = str(profile or config_get(cfg, "scan_profile", "balanced") or "balanced").strip().lower()
+    if value == "standard":
+        return "balanced"
     if value == "full":
         value = "aggressive"
     if value not in SAFETY_PROFILES:
@@ -1480,7 +1482,7 @@ def _framework_version() -> str:
 def _ensure_scan_state_metadata(domain: str, state: dict) -> dict:
     state.setdefault("target", domain)
     state.setdefault("scan_id", uuid.uuid4().hex)
-    state.setdefault("scan_profile", "standard")
+    state["scan_profile"] = normalize_scan_profile(state.get("scan_profile"))
     state.setdefault("framework_version", _framework_version())
     state.setdefault("report_version", REPORT_VERSION)
     state.setdefault("state_version", 1)
@@ -1490,6 +1492,9 @@ def _ensure_scan_state_metadata(domain: str, state: dict) -> dict:
 def save_scan_state(domain: str, output: Path, state: dict) -> None:
     path = scan_state_path(domain, output)
     path.parent.mkdir(parents=True, exist_ok=True)
+    marker = _read_json_file_silent(target_output_dir(output, domain) / RUN_MARKER_FILENAME)
+    if isinstance(marker, dict) and marker.get("profile") and _run_marker_matches(target_output_dir(output, domain) / RUN_MARKER_FILENAME, domain):
+        state["scan_profile"] = normalize_scan_profile(str(marker.get("profile")), load_config())
     _ensure_scan_state_metadata(domain, state)
     state["updated_at"] = now_iso()
     write_json(path, state)

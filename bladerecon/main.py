@@ -1017,6 +1017,8 @@ def full(
     """
     domain = _require_domain("full", domain)
     active_profile = normalize_scan_profile(profile)
+    if resume_mode:
+        active_profile = resolve_scan_run_profile(output, domain)
     info(f"Target acquired: {domain}")
     info(f"Safety profile: {active_profile}")
     requirements = ["Playwright", "Chromium", "Output Directories", "Permissions"]

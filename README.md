@@ -229,6 +229,12 @@ BladeRecon defaults to `balanced`. Use `safe` for bug bounty programs or shared 
 | `balanced` | Default day-to-day recon | Moderate concurrency, capped JS/screenshots/Nuclei targets, per-host limits |
 | `aggressive` | Explicit opt-in speed | Higher ceilings and concurrency while still retaining rate limits |
 
+Profiles control request pressure and ceilings, not a guaranteed wall-clock
+ordering. A `safe` scan can take longer than `aggressive` when lower
+concurrency, one-request-per-host browser work, retries, or target-side delays
+dominate runtime. Reports show full scan duration and per-module timings so the
+slow path is visible.
+
 Examples:
 
 ```bash

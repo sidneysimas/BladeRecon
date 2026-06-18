@@ -111,11 +111,21 @@ def test_resolve_scan_run_profile_prefers_run_marker_then_legacy_scan_state(tmp_
     assert utils.resolve_scan_run_profile(tmp_path, "example.com") == "safe"
 
 
+def test_scan_state_save_reconciles_isolated_run_profile_to_marker(tmp_path: Path) -> None:
+    run_dir = utils.create_scan_run_output_dir(tmp_path, "example.com", "aggressive")
+
+    utils.save_scan_state("example.com", run_dir, {"scan_profile": "balanced", "completed_modules": []})
+
+    state = utils.load_scan_state("example.com", run_dir)
+    assert state["scan_profile"] == "aggressive"
+
+
 def test_normalize_scan_profile_treats_typer_optioninfo_as_missing() -> None:
     class OptionInfo:
         pass
 
     assert utils.normalize_scan_profile(OptionInfo()) == "balanced"
+    assert utils.normalize_scan_profile("standard") == "balanced"
 
 
 def test_scan_state_tracks_completed_and_failed_modules(tmp_path: Path) -> None:
@@ -124,7 +134,7 @@ def test_scan_state_tracks_completed_and_failed_modules(tmp_path: Path) -> None:
 
     state = utils.load_scan_state("example.com", tmp_path)
     assert state["scan_id"]
-    assert state["scan_profile"] == "standard"
+    assert state["scan_profile"] == "balanced"
     assert state["framework_version"]
     assert state["report_version"] == utils.REPORT_VERSION
     assert "probe" in state["completed_modules"]

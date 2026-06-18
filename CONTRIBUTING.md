@@ -18,6 +18,12 @@ release quality without expanding scope.
 - Broad refactors that do not fix a release issue.
 - Low-signal inventory expansion.
 
+## Community Standards
+
+Follow `CODE_OF_CONDUCT.md` in all project spaces. Use the GitHub issue
+templates for bugs, feature requests, and report-quality feedback so maintainers
+can reproduce problems without exposing sensitive third-party target data.
+
 ## Local Checks
 
 ```bash

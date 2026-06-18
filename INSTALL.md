@@ -70,9 +70,14 @@ bladerecon report example.com
 Reports are written to:
 
 ```text
-results/example.com/reports/report.html
-results/example.com/reports/report.md
+results/example.com/runs/<latest-run-id>/reports/report.html
+results/example.com/runs/<latest-run-id>/reports/report.md
 ```
+
+BladeRecon also writes `results/example.com/latest_run.json`, which points
+`bladerecon report example.com` and `bladerecon resume example.com` at the
+latest valid isolated run. If no isolated full-run exists, report generation
+falls back to the legacy `results/example.com/` module-output layout.
 
 ## Optional External Tools
 

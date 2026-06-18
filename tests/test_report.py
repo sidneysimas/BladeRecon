@@ -426,6 +426,49 @@ def test_report_uses_newest_run_after_profile_sequence(tmp_path: Path) -> None:
     assert not (runs[-2] / "reports" / "report.md").exists()
 
 
+def test_report_prefers_run_marker_profile_over_stale_scan_state(tmp_path: Path) -> None:
+    run_dir = create_scan_run_output_dir(tmp_path, "example.com", "aggressive")
+    (run_dir / "scan_state.json").write_text(
+        json.dumps({"scan_profile": "balanced", "modules": {}}),
+        encoding="utf-8",
+    )
+
+    report.run("example.com", output=tmp_path)
+
+    md = (run_dir / "reports" / "report.md").read_text(encoding="utf-8")
+    assert "- Scan profile: Aggressive" in md
+    assert "- Scan profile: Balanced" not in md
+
+
+def test_report_duration_uses_module_total_when_recorded_duration_is_too_small(tmp_path: Path) -> None:
+    run_dir = create_scan_run_output_dir(tmp_path, "example.com", "safe")
+    (run_dir / "logs").mkdir()
+    (run_dir / "logs" / "scan_meta.json").write_text(
+        '{"duration_human":"0.07s","duration_seconds":0.07}',
+        encoding="utf-8",
+    )
+    (run_dir / "scan_state.json").write_text(
+        json.dumps(
+            {
+                "scan_profile": "safe",
+                "modules": {
+                    "probe": {"status": "completed", "duration_seconds": 65.0},
+                    "advanced": {"status": "completed", "duration_seconds": 125.5},
+                    "report": {"status": "completed", "duration_seconds": 0.07},
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    report.run("example.com", output=tmp_path)
+
+    md = (run_dir / "reports" / "report.md").read_text(encoding="utf-8")
+    assert "- Scan duration: 190.50s" in md
+    assert "- Total Duration: 190.50s" in md
+    assert "- Scan duration: 0.07s" not in md
+
+
 def test_report_uses_newest_valid_run_when_latest_pointer_is_malformed(tmp_path: Path) -> None:
     legacy_target = tmp_path / "example.com"
     legacy_target.mkdir(parents=True)
