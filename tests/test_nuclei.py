@@ -36,6 +36,19 @@ def test_nuclei_process_timeout_removes_temp_files(tmp_path):
     assert not (tmp_path / "stderr.tmp").exists()
 
 
+def test_nuclei_adaptive_timeout_reduces_small_roi_scans() -> None:
+    timeout, reason = nuclei._adaptive_module_timeout({}, "balanced", 300, 1, True, [], False)
+
+    assert timeout == 120
+    assert reason == "baseline-only adaptive timeout"
+
+
+def test_nuclei_adaptive_timeout_keeps_large_or_explicit_modes() -> None:
+    assert nuclei._adaptive_module_timeout({}, "balanced", 300, 75, False, ["nginx"], False) == (300, "large scope keeps configured timeout")
+    assert nuclei._adaptive_module_timeout({}, "balanced", 300, 5, False, [], True) == (300, "automatic scan keeps configured timeout")
+    assert nuclei._template_count_timeout(300, 3) == 15
+
+
 def test_nuclei_uses_empty_alive_file_as_empty_target_list(tmp_path):
     alive = tmp_path / "example.com" / "probe" / "alive.txt"
     alive.parent.mkdir(parents=True)

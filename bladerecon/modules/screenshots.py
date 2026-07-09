@@ -278,6 +278,7 @@ def _filter_screenshot_targets(urls: List[str], target_dir: Path, config: dict) 
     seen_titles: Set[str] = set()
     seen_lengths: Set[int] = set()
     placeholders = [str(x).lower() for x in config_get(config, "screenshots.placeholder_titles", [])]
+    browser_challenge_titles = {"just a moment", "attention required", "checking your browser", "cloudflare"}
     skip_titles = bool(config_get(config, "screenshots.skip_duplicate_titles", True))
     skip_lengths = bool(config_get(config, "screenshots.skip_duplicate_content_lengths", True))
 
@@ -293,7 +294,7 @@ def _filter_screenshot_targets(urls: List[str], target_dir: Path, config: dict) 
             continue
         if status >= 500:
             continue
-        if title and any(token in title for token in placeholders):
+        if title and any(token in title for token in [*placeholders, *browser_challenge_titles]):
             continue
         if skip_titles and title and title in seen_titles:
             continue

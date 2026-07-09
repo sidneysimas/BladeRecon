@@ -15,7 +15,7 @@ import re
 import time
 import warnings
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
 
 import httpx
@@ -439,6 +439,61 @@ async def _browser_probe_url(url: str, timeout: int) -> Dict[str, object]:
         return _result_dict(url=url, error=f"browser_probe_failed:{str(exc).splitlines()[0][:160]}")
 
 
+async def _browser_probe_urls(urls: List[str], timeout: int, concurrency: int = 2) -> List[Dict[str, object]]:
+    """Probe timeout URLs through one shared Chromium instance."""
+    if not urls:
+        return []
+    try:
+        from playwright.async_api import async_playwright  # type: ignore
+    except Exception as exc:
+        return [_result_dict(url=url, error=f"browser_probe_unavailable:{str(exc)[:120]}") for url in urls]
+
+    rows: List[Dict[str, object]] = []
+    sem = asyncio.Semaphore(max(1, min(concurrency, len(urls))))
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=True)
+        context = await browser.new_context(ignore_https_errors=True)
+
+        async def probe_one(url: str) -> None:
+            page: Optional[Any] = None
+            try:
+                async with sem:
+                    page = await context.new_page()
+                    response = await page.goto(url, wait_until="domcontentloaded", timeout=timeout * 1000)
+                    title = (await page.title())[:200]
+                    status_code = int(response.status) if response is not None else 0
+                    headers = await response.all_headers() if response is not None else {}
+                    final_url = page.url or url
+                    rows.append(
+                        _result_dict(
+                            url=url,
+                            final_url=final_url,
+                            status_code=status_code,
+                            title=title,
+                            content_length=int(headers.get("content-length") or 0),
+                            redirects=[final_url] if final_url != url else [],
+                            alive=bool(status_code and (status_code in ALIVE_STATUS_CODES or 100 <= status_code < 500)),
+                            server=headers.get("server", ""),
+                            error="" if status_code else "browser_loaded_without_response",
+                        )
+                    )
+            except Exception as exc:
+                rows.append(_result_dict(url=url, error=f"browser_probe_failed:{str(exc).splitlines()[0][:160]}"))
+            finally:
+                if page:
+                    try:
+                        await page.close()
+                    except Exception:
+                        pass
+
+        try:
+            await asyncio.gather(*(probe_one(url) for url in urls), return_exceptions=True)
+        finally:
+            await context.close()
+            await browser.close()
+    return rows
+
+
 # ---------------------------------------------------------------------------
 # Core probing
 # ---------------------------------------------------------------------------
@@ -568,10 +623,12 @@ async def _run_probes(
         fallback_reporter = ProgressReporter("Probe Browser Fallback", total=len(fallback_urls), interval=10)
         fallback_completed = 0
 
+        browser_rows = {str(row.get("url")): row for row in await _browser_probe_urls(fallback_urls, timeout, concurrency=2)}
+
         async def _browser_worker(url: str) -> None:
             nonlocal fallback_completed
             async with browser_sem:
-                row = await _browser_probe_url(url, timeout)
+                row = browser_rows.get(url, _result_dict(url=url, error="browser_probe_no_result"))
                 if row.get("alive"):
                     replacement[url] = row
                 elif row.get("error"):

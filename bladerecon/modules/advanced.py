@@ -949,13 +949,41 @@ def build_asset_priority(target: str, output: Path) -> Dict[str, Any]:
 
 async def _run_async(target: str, output: Path, profile: str, resume: bool) -> Dict[str, Any]:
     config = load_config()
+    phase_timings: Dict[str, float] = {}
+    phase_started = time.perf_counter()
     historical_meta, historical_requests = await collect_historical(target, output, config, profile, resume=resume)
+    phase_timings["historical"] = round(time.perf_counter() - phase_started, 2)
+    phase_started = time.perf_counter()
     diff = correlate_historical(target, output)
-    content_meta, content_requests = await run_content_discovery(target, output, config, profile, resume=resume)
-    header_assets, header_requests = await collect_security_header_assets(target, output, config, profile)
-    historical_js_meta, historical_js_requests = await collect_historical_js(target, output, config, profile, resume=resume)
+    phase_timings["historical_diff"] = round(time.perf_counter() - phase_started, 2)
+
+    async def timed_phase(name: str, coro: Any) -> Tuple[str, Any, float]:
+        started = time.perf_counter()
+        result = await coro
+        return name, result, time.perf_counter() - started
+
+    phase_results = await asyncio.gather(
+        timed_phase("content_discovery", run_content_discovery(target, output, config, profile, resume=resume)),
+        timed_phase("security_headers", collect_security_header_assets(target, output, config, profile)),
+        timed_phase("historical_js", collect_historical_js(target, output, config, profile, resume=resume)),
+    )
+    by_phase = {name: result for name, result, duration in phase_results}
+    for name, _result, duration in phase_results:
+        phase_timings[name] = round(duration, 2)
+    content_meta, content_requests = by_phase["content_discovery"]
+    header_assets, header_requests = by_phase["security_headers"]
+    historical_js_meta, historical_js_requests = by_phase["historical_js"]
+    phase_started = time.perf_counter()
     priority = build_asset_priority(target, output)
+    phase_timings["asset_priority"] = round(time.perf_counter() - phase_started, 2)
     total_requests = historical_requests + content_requests + header_requests + historical_js_requests
+    signal_count = (
+        int(historical_meta.get("endpoints", 0) or 0)
+        + int(content_meta.get("findings", 0) or 0)
+        + len(header_assets.get("assets", []))
+        + int(historical_js_meta.get("endpoints", 0) or 0)
+        + int(historical_js_meta.get("secrets", 0) or 0)
+    )
     return {
         "historical": historical_meta,
         "historical_diff": diff,
@@ -964,6 +992,13 @@ async def _run_async(target: str, output: Path, profile: str, resume: bool) -> D
         "historical_js": historical_js_meta,
         "asset_priority": {"asset_count": priority.get("asset_count", 0), "top_assets": len(priority.get("top_assets", []))},
         "requests_sent": total_requests,
+        "phase_timings": phase_timings,
+        "roi": {
+            "signals": signal_count,
+            "requests_sent": total_requests,
+            "signals_per_request": round(signal_count / max(total_requests, 1), 4),
+            "empty_scope": not bool(_read_lines(target_output_dir(output, target) / "probe" / "alive.txt")),
+        },
     }
 
 

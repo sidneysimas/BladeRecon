@@ -594,6 +594,40 @@ def _count_targets(target_domain: Optional[str], target_list: Optional[Path]) ->
     return 1 if target_domain else 0
 
 
+def _adaptive_module_timeout(config: dict, profile: str, configured_timeout: int, target_count: int, baseline_only: bool, selected_tags: List[str], automatic_scan: bool) -> Tuple[int, str]:
+    """Choose a conservative wall-clock timeout from target count and evidence mode."""
+    if configured_timeout <= 0:
+        return configured_timeout, "disabled"
+    if target_count <= 0:
+        return min(configured_timeout, 30), "empty target set"
+    if automatic_scan:
+        return configured_timeout, "automatic scan keeps configured timeout"
+    normalized = normalize_scan_profile(profile, config)
+    if target_count > 50:
+        return configured_timeout, "large scope keeps configured timeout"
+    if baseline_only:
+        estimate = {"safe": 90, "balanced": 120, "aggressive": 180}.get(normalized, 120)
+        if target_count > 10:
+            estimate += 60
+        return min(configured_timeout, estimate), "baseline-only adaptive timeout"
+    if selected_tags:
+        estimate = {"safe": 120, "balanced": 180, "aggressive": 240}.get(normalized, 180)
+        if target_count > 10:
+            estimate += 60
+        return min(configured_timeout, estimate), "evidence-tag adaptive timeout"
+    return configured_timeout, "configured timeout"
+
+
+def _template_count_timeout(module_timeout: int, target_count: int) -> int:
+    if module_timeout <= 0:
+        return 30
+    if target_count <= 5:
+        return min(module_timeout, 15)
+    if target_count <= 25:
+        return min(module_timeout, 30)
+    return min(module_timeout, 60)
+
+
 def _normalize_target_list_file(target_list: Path, out_dir: Path) -> Path:
     """Write a BOM-free target list for Nuclei and return its path."""
     raw = target_list.read_text(encoding="utf-8-sig")
@@ -959,7 +993,9 @@ def run(
     if automatic_scan:
         cmd += ["-as"]
 
-    module_timeout = int(timeout if timeout is not None else config_get(config, "nuclei.module_timeout", get_timeout("nuclei", 300)) or 0)
+    configured_module_timeout = int(timeout if timeout is not None else config_get(config, "nuclei.module_timeout", get_timeout("nuclei", 300)) or 0)
+    module_timeout = configured_module_timeout
+    module_timeout_reason = "explicit timeout" if timeout is not None else "configured timeout"
     enforce_module_timeout = bool(config_get(config, "nuclei.enforce_module_timeout", False))
     progress_interval = int(config_get(config, "nuclei.progress_interval", 10) or 10)
     cmd += ["-timeout", str(config_get(config, "nuclei.request_timeout", 8)), "-retries", str(config_get(config, "nuclei.retries", 0)), "-j", "-nc", "-duc"]
@@ -1014,6 +1050,8 @@ def run(
         cmd += ["-l", str(capped_file)]
         target_list = capped_file
         target_count = baseline_max_targets
+    if timeout is None:
+        module_timeout, module_timeout_reason = _adaptive_module_timeout(config, profile, configured_module_timeout, target_count, baseline_only, selected_tags, automatic_scan)
     roi_gate_enabled = bool(config_get(config, "nuclei.roi_gate.enabled", True))
     roi_decision = _nuclei_roi_decision(
         output,
@@ -1051,6 +1089,8 @@ def run(
                 "host_scope": roi_scope.get("host_scope", []),
             }
             selection_reason = "broad infrastructure tags; constrained to ROI opportunity hosts"
+            if timeout is None:
+                module_timeout, module_timeout_reason = _adaptive_module_timeout(config, profile, configured_module_timeout, target_count, baseline_only, selected_tags, automatic_scan)
     if roi_gate_enabled and not bool(roi_decision.get("run", True)):
         duration = time.perf_counter() - started
         reason = str(roi_decision.get("reason") or "baseline-only scan skipped: insufficient opportunity evidence")
@@ -1101,6 +1141,7 @@ def run(
             "request_timeout": config_get(config, "nuclei.request_timeout", 8),
             "retries": config_get(config, "nuclei.retries", 0),
             "module_timeout": module_timeout,
+            "module_timeout_reason": module_timeout_reason,
             "enforce_module_timeout": enforce_module_timeout,
             "duration_seconds": round(duration, 2),
             "findings_count": 0,
@@ -1182,6 +1223,7 @@ def run(
                 "request_timeout": config_get(config, "nuclei.request_timeout", 8),
                 "retries": config_get(config, "nuclei.retries", 0),
                 "module_timeout": module_timeout,
+                "module_timeout_reason": module_timeout_reason,
                 "enforce_module_timeout": enforce_module_timeout,
                 "duration_seconds": round(duration, 2),
                 "findings_count": 0,
@@ -1205,6 +1247,8 @@ def run(
             target_scope = roi_target_scope
             selection_reason += "; scoped to validated opportunity hosts"
             info(f"Nuclei baseline-only scope reduced to {target_count} opportunity targets")
+            if timeout is None:
+                module_timeout, module_timeout_reason = _adaptive_module_timeout(config, profile, configured_module_timeout, target_count, baseline_only, selected_tags, automatic_scan)
         elif roi_target_scope.get("reason"):
             target_scope = roi_target_scope
     baseline_roi: Dict[str, object] = {"run": False, "reason": "not evaluated", "targets": []}
@@ -1242,10 +1286,11 @@ def run(
             baseline_skip_reason = str(baseline_roi.get("reason") or "baseline skipped by opportunity ROI")
             baseline_reason = baseline_skip_reason
     count_templates_before_run = bool(config_get(config, "nuclei.count_templates_before_run", False))
+    template_count_timeout = _template_count_timeout(module_timeout, target_count)
     baseline_cmd = _baseline_target_command(cmd, baseline_target_domain, baseline_target_list)
     baseline_cmd = _replace_flag_value(baseline_cmd, "-severity", baseline_severity)
-    baseline_template_candidates = _count_matching_templates(baseline_cmd, timeout=min(module_timeout or 60, 60)) if baseline_needed and count_templates_before_run else None
-    template_candidates = _count_matching_templates(cmd, timeout=min(module_timeout or 60, 60)) if count_templates_before_run else None
+    baseline_template_candidates = _count_matching_templates(baseline_cmd, timeout=template_count_timeout) if baseline_needed and count_templates_before_run else None
+    template_candidates = _count_matching_templates(cmd, timeout=template_count_timeout) if count_templates_before_run else None
     tag_fallback_reason = ""
     if selected_tags and not explicit_templates and template_candidates == 0:
         tag_fallback_reason = "Selected intelligence tags matched zero templates; retrying with automatic/profile selection"
@@ -1334,6 +1379,7 @@ def run(
                     "request_timeout": config_get(config, "nuclei.request_timeout", 8),
                     "retries": config_get(config, "nuclei.retries", 0),
                     "module_timeout": module_timeout,
+                    "module_timeout_reason": module_timeout_reason,
                     "enforce_module_timeout": enforce_module_timeout,
                     "duration_seconds": round(duration, 2),
                     "findings_count": 0,
@@ -1344,7 +1390,7 @@ def run(
                 skip("Nuclei module skipped")
                 info(f"Reason: {reason}")
                 return skipped_result(reason)
-        template_candidates = _count_matching_templates(cmd, timeout=min(module_timeout or 60, 60)) if count_templates_before_run else None
+        template_candidates = _count_matching_templates(cmd, timeout=template_count_timeout) if count_templates_before_run else None
         baseline_needed = False
         baseline_reason = "tag fallback disabled baseline"
     info(f"Running nuclei profile={profile} severity={resolved_severity} targets={target_name}" + (" automatic-scan=on" if automatic_scan else ""))
@@ -1480,6 +1526,7 @@ def run(
                         "request_timeout": config_get(config, "nuclei.request_timeout", 8),
                         "retries": config_get(config, "nuclei.retries", 0),
                         "module_timeout": module_timeout,
+                        "module_timeout_reason": module_timeout_reason,
                         "enforce_module_timeout": enforce_module_timeout,
                         "duration_seconds": round(duration, 2),
                         "findings_count": 0,
@@ -1490,7 +1537,7 @@ def run(
                     skip("Nuclei module skipped")
                     info(f"Reason: {reason}")
                     return skipped_result(reason)
-            template_candidates = _count_matching_templates(cmd, timeout=min(module_timeout or 60, 60)) if count_templates_before_run else None
+            template_candidates = _count_matching_templates(cmd, timeout=template_count_timeout) if count_templates_before_run else None
             baseline_needed = False
             with log_duration(log, "nuclei tag fallback retry"):
                 proc = _run_nuclei_process(cmd, module_timeout, out_dir, template_candidates, target_count, enforce_timeout=enforce_module_timeout, progress_interval=progress_interval)
@@ -1589,6 +1636,7 @@ def run(
                 "request_timeout": config_get(config, "nuclei.request_timeout", 8),
                 "retries": config_get(config, "nuclei.retries", 0),
                 "module_timeout": module_timeout,
+                "module_timeout_reason": module_timeout_reason,
                 "enforce_module_timeout": enforce_module_timeout,
                 "duration_seconds": round(duration, 2),
                 "findings_count": len(findings),
@@ -1679,6 +1727,8 @@ def run(
             "concurrency": resolved_concurrency,
             "request_timeout": config_get(config, "nuclei.request_timeout", 8),
             "retries": config_get(config, "nuclei.retries", 0),
+            "module_timeout": module_timeout if "module_timeout" in locals() else effective_timeout,
+            "module_timeout_reason": module_timeout_reason if "module_timeout_reason" in locals() else "configured timeout",
             "duration_seconds": round(duration, 2),
             "timeout_seconds": effective_timeout,
             "status": "timed_out",

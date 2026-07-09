@@ -37,3 +37,21 @@ def test_screenshot_filter_skips_probe_known_5xx_targets(tmp_path: Path) -> None
     )
 
     assert selected == ["https://ok.example.com"]
+
+
+def test_screenshot_filter_skips_known_browser_challenge_titles(tmp_path: Path) -> None:
+    target = tmp_path / "example.com"
+    (target / "probe").mkdir(parents=True)
+    (target / "probe" / "probe.json").write_text(
+        '[{"final_url":"https://ok.example.com","status_code":200,"title":"OK","content_length":100},'
+        '{"final_url":"https://cf.example.com","status_code":403,"title":"Just a moment...","content_length":200}]',
+        encoding="utf-8",
+    )
+
+    selected = screenshots._filter_screenshot_targets(
+        ["https://ok.example.com", "https://cf.example.com"],
+        target,
+        {"screenshots": {"skip_duplicate_titles": True, "skip_duplicate_content_lengths": False, "placeholder_titles": []}},
+    )
+
+    assert selected == ["https://ok.example.com"]

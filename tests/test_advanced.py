@@ -139,3 +139,37 @@ def test_historical_js_secrets_are_redacted_in_artifacts(tmp_path: Path) -> None
     assert "value" not in rows[0]
     assert rows[0]["value_preview"]
     assert rows[0]["value_fingerprint"]
+
+
+def test_advanced_async_records_phase_timings_and_roi(monkeypatch, tmp_path: Path) -> None:
+    target = tmp_path / "example.com"
+    (target / "probe").mkdir(parents=True)
+    (target / "probe" / "alive.txt").write_text("https://www.example.com\n", encoding="utf-8")
+
+    async def fake_historical(*args, **kwargs):
+        return {"endpoints": 2}, 3
+
+    async def fake_content(*args, **kwargs):
+        return {"findings": 1}, 4
+
+    async def fake_headers(*args, **kwargs):
+        return {"assets": [{"asset": "api.example.com"}]}, 1
+
+    async def fake_historical_js(*args, **kwargs):
+        return {"endpoints": 1, "secrets": 1}, 2
+
+    monkeypatch.setattr(advanced, "load_config", lambda: {})
+    monkeypatch.setattr(advanced, "collect_historical", fake_historical)
+    monkeypatch.setattr(advanced, "correlate_historical", lambda *args, **kwargs: {})
+    monkeypatch.setattr(advanced, "run_content_discovery", fake_content)
+    monkeypatch.setattr(advanced, "collect_security_header_assets", fake_headers)
+    monkeypatch.setattr(advanced, "collect_historical_js", fake_historical_js)
+    monkeypatch.setattr(advanced, "build_asset_priority", lambda *args, **kwargs: {"asset_count": 1, "top_assets": [{}]})
+
+    summary = asyncio.run(advanced._run_async("example.com", tmp_path, "safe", False))
+
+    assert summary["requests_sent"] == 10
+    assert summary["roi"]["signals"] == 6
+    assert summary["roi"]["signals_per_request"] == 0.6
+    assert summary["roi"]["empty_scope"] is False
+    assert {"historical", "content_discovery", "security_headers", "historical_js", "asset_priority"} <= set(summary["phase_timings"])
