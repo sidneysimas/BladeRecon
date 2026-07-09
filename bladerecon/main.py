@@ -1308,7 +1308,8 @@ def report(
 ) -> None:
     """Generate a combined Markdown and HTML report for a target.
 
-    Reads results from `output/<domain>/` and writes reports under `reports/`.
+    Uses the latest isolated full-scan run when available, otherwise falls back
+    to the legacy `output/<domain>/` module-output layout.
     """
     try:
         from .modules import report as rmod  # type: ignore

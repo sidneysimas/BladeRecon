@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Added release-readiness community files for support and pull requests.
+- Clarified responsible-use guidance, Python version support, and report command
+  behavior in user-facing documentation.
+- Improved issue templates so maintainers receive sanitized reproduction data,
+  environment details, and validation context.
+
 ## 0.2.1 - 2026-06-05
 
 - Added a discoverable `bladerecon scan` alias for the standard full workflow and surfaced a Start Here path in root help for first-time users.

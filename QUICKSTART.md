@@ -2,6 +2,9 @@
 
 This is the five-minute path from install to first report.
 
+Only scan targets you own or have explicit permission to test. Keep shared
+reports, logs, and issue attachments sanitized.
+
 ## 1. Install
 
 Recommended:

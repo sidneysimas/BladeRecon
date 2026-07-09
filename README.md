@@ -2,7 +2,7 @@
 
 ![BladeRecon banner](https://raw.githubusercontent.com/mohamedxk9tb/BladeRecon/main/assets/banner.png)
 
-![Python](https://img.shields.io/badge/python-3.8%2B-blue)
+![Python](https://img.shields.io/badge/python-3.9%2B-blue)
 ![Version](https://img.shields.io/badge/version-0.2.1-cyan)
 ![CLI](https://img.shields.io/badge/interface-Rich%20CLI-0f766e)
 ![Reports](https://img.shields.io/badge/reports-HTML%20%2B%20Markdown-4b5563)
@@ -28,6 +28,9 @@ It is designed to be:
 - Easy to inspect manually, automate from files, and hand over as reports
 
 It is not intended to replace Amass, distributed recon stacks, or enterprise scanners.
+
+Use BladeRecon only on assets you own or are authorized to test. Public issue
+reports and shared artifacts should be sanitized before posting.
 
 
 ### CLI Preview
@@ -394,6 +397,9 @@ on future scans.
 - [QUICKSTART](QUICKSTART.md)
 - [TROUBLESHOOTING](TROUBLESHOOTING.md)
 - [CHANGELOG](CHANGELOG.md)
+- [CONTRIBUTING](CONTRIBUTING.md)
+- [SECURITY](SECURITY.md)
+- [SUPPORT](SUPPORT.md)
 
 ## License
 

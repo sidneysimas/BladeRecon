@@ -14,6 +14,14 @@ assignees: ""
 
 <!-- Where was the guidance helpful or misleading? -->
 
+## Scan Context
+
+- BladeRecon version:
+- Safety profile:
+- Target type:
+- Nuclei status:
+- Relevant module statuses:
+
 ## Helpful Or Misleading Guidance
 
 
@@ -27,3 +35,7 @@ assignees: ""
 ## Sanitized Artifacts
 
 <!-- Attach or summarize relevant sanitized report snippets, scan_state.json, module metadata, or screenshots. Do not include secrets or unauthorized target data. -->
+
+## Data Safety
+
+- [ ] I removed secrets, tokens, customer data, and unauthorized third-party target data.

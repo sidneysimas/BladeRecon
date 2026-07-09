@@ -15,6 +15,9 @@ assignees: ""
 - OS:
 - Python version:
 - Install method:
+- BladeRecon profile:
+- Nuclei installed:
+- Playwright Chromium installed:
 
 ## Command Executed
 
@@ -22,11 +25,25 @@ assignees: ""
 
 ```
 
+## Reproduction Steps
+
+1.
+2.
+3.
+
 ## Expected Behavior
 
 
 ## Actual Behavior
 
+
+## Run State
+
+<!-- If available, summarize latest_run.json and scan_state.json. -->
+
+- Output path:
+- Run ID:
+- Failed, skipped, or timed out module:
 
 ## Logs
 
@@ -40,5 +57,9 @@ assignees: ""
 
 <!-- Attach or summarize relevant sanitized files, such as scan_state.json, latest_run.json, report.md, module metadata, or screenshots. Do not include third-party secrets or unauthorized target data. -->
 
-## Additional Context
+## Data Safety
 
+- [ ] I removed secrets, tokens, customer data, and unauthorized third-party target data.
+- [ ] I can reproduce this with a permitted target or sanitized fixture.
+
+## Additional Context

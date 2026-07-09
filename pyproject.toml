@@ -60,6 +60,8 @@ Homepage = "https://github.com/mohamedxk9tb/BladeRecon"
 Repository = "https://github.com/mohamedxk9tb/BladeRecon"
 Issues = "https://github.com/mohamedxk9tb/BladeRecon/issues"
 Changelog = "https://github.com/mohamedxk9tb/BladeRecon/blob/main/CHANGELOG.md"
+Documentation = "https://github.com/mohamedxk9tb/BladeRecon#documentation"
+Security = "https://github.com/mohamedxk9tb/BladeRecon/blob/main/SECURITY.md"
 
 [project.scripts]
 bladerecon = "bladerecon.main:app"

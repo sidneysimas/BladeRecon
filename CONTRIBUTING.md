@@ -33,6 +33,17 @@ python -m build
 bladerecon doctor
 ```
 
+## Pull Requests
+
+Before opening a pull request:
+
+- Keep changes scoped to one release-quality problem.
+- Include tests for runtime, report, or artifact behavior when behavior changes.
+- Update README, QUICKSTART, INSTALL, or TROUBLESHOOTING when user-facing
+  behavior or commands change.
+- Do not include real target data, secrets, private program names, or generated
+  scan artifacts.
+
 ## Development Install
 
 ```bash
