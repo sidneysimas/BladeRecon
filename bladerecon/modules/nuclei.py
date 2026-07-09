@@ -22,7 +22,7 @@ from rich.markup import escape
 console = Console()
 
 from .intelligence import TEMPLATE_TAGS
-from .utils import ModuleResult, atomic_write_text, config_get, deduplicate_alive_urls, format_duration, get_profiled_ceiling, get_profiled_concurrency, get_profiled_rate_limit, get_timeout, info, load_config, log_duration, normalize_scan_profile, normalize_target, nuclei_template_status, prepare_module_output, print_module_summary, setup_logging, skipped_result, skip, success, suppress_third_party_banner, target_output_dir, warn, write_json
+from .utils import ModuleResult, atomic_write_text, config_get, deduplicate_alive_urls, format_duration, get_profiled_ceiling, get_profiled_concurrency, get_profiled_rate_limit, get_timeout, info, load_config, log_duration, normalize_scan_profile, normalize_target, nuclei_template_status, prepare_module_output, print_module_summary, safe_artifact_target_name, setup_logging, skipped_result, skip, success, suppress_third_party_banner, target_output_dir, warn, write_json
 
 SEVERITY_ORDER = ("critical", "high", "medium", "low", "info", "unknown")
 BROAD_INFRA_TAGS = {"apache", "nginx"}
@@ -606,7 +606,7 @@ def _normalize_target_list_file(target_list: Path, out_dir: Path) -> Path:
 def _resolve_target_file(domain: Optional[str], list_file: Optional[Path], output: Path) -> Tuple[Optional[str], Optional[Path], str]:
     """Prefer alive hosts for domain scans and return target metadata."""
     if list_file:
-        return None, list_file, normalize_target(list_file.stem)
+        return None, list_file, safe_artifact_target_name(list_file.stem, "file")
     if not domain:
         return None, None, "nuclei"
     safe_domain = normalize_target(domain)

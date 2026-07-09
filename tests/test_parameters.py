@@ -25,7 +25,7 @@ def test_parameter_discovery_skips_empty_url_file(tmp_path: Path) -> None:
 
     assert result.status == "skipped"
     assert result.reason == "No URL sources available"
-    assert not (tmp_path / "urls" / "parameters" / "parameters.txt").exists()
+    assert not (tmp_path / "_file.urls.invalid" / "parameters" / "parameters.txt").exists()
 
 
 def test_parameter_discovery_uses_local_fallback_urls(monkeypatch, tmp_path: Path) -> None:

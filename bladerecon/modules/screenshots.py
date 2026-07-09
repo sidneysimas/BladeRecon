@@ -20,7 +20,7 @@ from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
 from rich.console import Console
 
-from .utils import AsyncRateLimiter, ModuleResult, ProgressReporter, check_playwright_chromium, config_get, deduplicate_alive_urls, get_concurrency, get_profiled_ceiling, get_profiled_concurrency, get_profiled_per_host_concurrency, get_profiled_rate_limit, get_timeout, host_key, info, limit_items_with_notice, load_config, log_duration, normalize_scan_profile, normalize_target, prepare_module_output, print_module_summary, setup_logging, skipped_result, skip, success, target_output_dir, warn, write_json
+from .utils import AsyncRateLimiter, ModuleResult, ProgressReporter, check_playwright_chromium, config_get, deduplicate_alive_urls, get_concurrency, get_profiled_ceiling, get_profiled_concurrency, get_profiled_per_host_concurrency, get_profiled_rate_limit, get_timeout, host_key, info, limit_items_with_notice, load_config, log_duration, normalize_scan_profile, normalize_target, prepare_module_output, print_module_summary, safe_artifact_target_name, setup_logging, skipped_result, skip, success, target_output_dir, warn, write_json
 
 console = Console()
 
@@ -325,7 +325,7 @@ def run(domain: Optional[str] = None, list_file: Optional[Path] = None, output: 
             warn(f"List file not found: {list_file}")
             return ModuleResult()
         urls = _read_urls_from_file(list_file)
-        target_name = normalize_target(list_file.stem)
+        target_name = safe_artifact_target_name(list_file.stem, "file")
     else:
         # assume domain; create common variants and canonical URL
         domain = domain.strip()

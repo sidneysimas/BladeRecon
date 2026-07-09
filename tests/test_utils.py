@@ -28,10 +28,61 @@ def test_wordlist_loading_ignores_comments_empty_and_duplicates(tmp_path: Path) 
     assert utils.read_wordlist(wordlist) == ["api", "admin"]
 
 
-def test_normalize_target_accepts_urls_and_strips_paths() -> None:
-    assert utils.normalize_target("target.com") == "target.com"
-    assert utils.normalize_target("https://target.com") == "target.com"
-    assert utils.normalize_target("https://target.com/path?q=1") == "target.com"
+@pytest.mark.parametrize(
+    ("target", "expected"),
+    [
+        ("target.com", "target.com"),
+        ("api.target.com", "api.target.com"),
+        ("TARGET.COM.", "target.com"),
+        ("https://target.com", "target.com"),
+        ("https://target.com/", "target.com"),
+        ("https://target.com:8443", "target.com_8443"),
+        ("*.example.com", "wildcard.example.com"),
+        ("192.168.1.1", "192.168.1.1"),
+        ("2001:db8::1", "ipv6_2001_db8__1"),
+        ("192.168.1.0/24", "cidr_192.168.1.0_24"),
+        ("2001:db8::/32", "cidr_2001_db8___32"),
+    ],
+)
+def test_normalize_target_accepts_supported_target_types(target: str, expected: str) -> None:
+    assert utils.normalize_target(target) == expected
+
+
+@pytest.mark.parametrize(
+    "target",
+    [
+        "123",
+        "hello",
+        "google",
+        "localhost",
+        "https://target.com/path?q=1",
+        "https://target.com/#fragment",
+        "https://user:pass@target.com",
+        "ftp://target.com",
+        "http://",
+        "http://target.com:99999",
+        "999.1.1.1",
+        "1.2.3.4/33",
+        "192.168.1.1/24",
+        "2001:db8::/129",
+        "*.*.example.com",
+        "bad_label.example.com",
+        "-bad.example.com",
+        "bad-.example.com",
+    ],
+)
+def test_normalize_target_rejects_invalid_or_ambiguous_targets(target: str) -> None:
+    with pytest.raises(ValueError):
+        utils.normalize_target(target)
+
+
+def test_artifact_target_names_do_not_validate_as_scan_targets(tmp_path: Path) -> None:
+    artifact = utils.safe_artifact_target_name("urls.txt", "file")
+
+    assert artifact == "_file.urls-txt.invalid"
+    with pytest.raises(ValueError):
+        utils.normalize_target(artifact)
+    assert utils.target_output_dir(tmp_path, artifact) == (tmp_path / artifact).resolve()
 
 
 def test_normalize_target_rejects_path_traversal_and_absolute_paths() -> None:

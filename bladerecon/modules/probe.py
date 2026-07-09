@@ -45,6 +45,7 @@ from .utils import (
     normalize_scan_profile,
     prepare_module_output,
     print_module_summary,
+    safe_artifact_target_name,
     setup_logging,
     success,
     target_output_dir,
@@ -648,7 +649,7 @@ def run(
             warn(f"List file not found: {list_file}")
             return []
         urls = _normalize_probe_targets(list_file.read_text(encoding="utf-8").splitlines())
-        target_name = list_file.stem
+        target_name = safe_artifact_target_name(list_file.stem, "file")
     elif domain:
         sub_file = target_output_dir(output, domain) / "subdomains" / "subdomains.txt"
         if sub_file.exists():

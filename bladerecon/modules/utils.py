@@ -6,6 +6,7 @@ state/cache handling, and output helpers used by the command modules.
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import json
 import logging
 import os
@@ -514,10 +515,50 @@ def read_wordlist(path: Path) -> List[str]:
 
 TRAVERSAL_PATTERN = re.compile(r"(^|[\\/])\.\.([\\/]|$)|\.\.[\\/]|[\\/]\.\.")
 TARGET_NAME_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,252}$")
+DOMAIN_LABEL_PATTERN = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
+ARTIFACT_TARGET_NAME_PATTERN = re.compile(r"^_[a-z0-9][a-z0-9.-]{0,80}$")
+
+
+def _safe_ip_address(value: str) -> str:
+    address = ipaddress.ip_address(value)
+    if address.version == 4:
+        return str(address)
+    return "ipv6_" + str(address).replace(":", "_")
+
+
+def _safe_ip_network(value: str) -> str:
+    network = ipaddress.ip_network(value, strict=True)
+    return "cidr_" + str(network).replace(":", "_").replace("/", "_")
+
+
+def _safe_domain(value: str, *, allow_wildcard: bool = True) -> str:
+    host = value.strip().lower().rstrip(".")
+    wildcard = False
+    if host.startswith("*."):
+        if not allow_wildcard:
+            raise ValueError("wildcard targets are not valid URLs")
+        wildcard = True
+        host = host[2:]
+    if "*" in host:
+        raise ValueError("wildcard must be the leading label, for example *.example.com")
+    if host == "localhost":
+        raise ValueError("localhost targets are not supported")
+    if "." not in host:
+        raise ValueError("target must be a fully qualified domain name, IP address, or CIDR range")
+    if len(host) > 253:
+        raise ValueError("domain target is too long")
+    labels = host.split(".")
+    if any(not label for label in labels):
+        raise ValueError("domain target contains an empty label")
+    if not all(DOMAIN_LABEL_PATTERN.match(label) for label in labels):
+        raise ValueError("domain target contains an invalid label")
+    if labels[-1].isdigit():
+        raise ValueError("domain target must not end with a numeric-only TLD")
+    return f"wildcard.{host}" if wildcard else host
 
 
 def normalize_target(value: str) -> str:
-    """Normalize a CLI target into a safe results directory name."""
+    """Validate a CLI target and return a deterministic results directory name."""
     raw = str(value or "").strip()
     if not raw:
         raise ValueError("target cannot be empty")
@@ -526,16 +567,60 @@ def normalize_target(value: str) -> str:
     if Path(raw).is_absolute():
         raise ValueError("target cannot be an absolute path")
 
-    parsed = urlsplit(raw if "://" in raw else f"//{raw}")
-    host = (parsed.hostname or "").strip().lower().rstrip(".")
-    port = f"_{parsed.port}" if parsed.port else ""
-    if not host:
-        raise ValueError("target must include a hostname")
-    if "/" in host or "\\" in host or host in {".", ".."} or ".." in host.split(os.sep):
-        raise ValueError("target hostname is not safe")
+    if "://" in raw:
+        parsed = urlsplit(raw)
+        if parsed.scheme.lower() not in {"http", "https"}:
+            raise ValueError("URL target must use http or https")
+        if parsed.username or parsed.password:
+            raise ValueError("URL target must not include credentials")
+        if parsed.path not in {"", "/"} or parsed.query or parsed.fragment:
+            raise ValueError("URL target must not include a path, query, or fragment")
+        try:
+            port = parsed.port
+        except ValueError as exc:
+            raise ValueError("URL target contains an invalid port") from exc
+        host = (parsed.hostname or "").strip().lower().rstrip(".")
+        if not host:
+            raise ValueError("URL target must include a hostname")
+        try:
+            safe = _safe_ip_address(host)
+        except ValueError:
+            safe = _safe_domain(host, allow_wildcard=False)
+        if port:
+            safe = f"{safe}_{port}"
+        if not TARGET_NAME_PATTERN.match(safe):
+            raise ValueError("target does not resolve to a safe results directory")
+        return safe
 
-    safe = f"{host}{port}"
-    safe = re.sub(r"[^A-Za-z0-9_.-]+", "_", safe).strip("._-")
+    if "/" in raw:
+        try:
+            safe = _safe_ip_network(raw)
+        except ValueError as exc:
+            raise ValueError("CIDR target is malformed") from exc
+        if not TARGET_NAME_PATTERN.match(safe):
+            raise ValueError("target does not resolve to a safe results directory")
+        return safe
+
+    try:
+        safe = _safe_ip_address(raw)
+    except ValueError:
+        try:
+            parsed = urlsplit(f"//{raw}")
+            try:
+                port = parsed.port
+            except ValueError as exc:
+                raise ValueError("target contains an invalid port") from exc
+            if parsed.path or parsed.query or parsed.fragment or parsed.username or parsed.password:
+                raise ValueError("target must not include a path, query, fragment, or credentials")
+            host = (parsed.hostname or "").strip().lower().rstrip(".")
+            if not host:
+                raise ValueError("target must include a hostname")
+            safe = _safe_domain(host)
+            if port:
+                safe = f"{safe}_{port}"
+        except ValueError:
+            raise
+
     if not safe or not TARGET_NAME_PATTERN.match(safe):
         raise ValueError("target does not resolve to a safe results directory")
     return safe
@@ -544,6 +629,19 @@ def normalize_target(value: str) -> str:
 def safe_target_name(value: str) -> str:
     """Return a filesystem-safe target folder name."""
     return normalize_target(value)
+
+
+def safe_artifact_target_name(value: str, prefix: str = "file") -> str:
+    """Return a deterministic pseudo-target name for non-scan artifacts."""
+    stem = re.sub(r"[^a-z0-9-]+", "-", str(value or "").strip().lower()).strip("-")
+    if not stem:
+        stem = "input"
+    stem = stem[:63].strip("-") or "input"
+    return f"_{prefix}.{stem}.invalid"
+
+
+def _is_artifact_target_name(value: str) -> bool:
+    return bool(ARTIFACT_TARGET_NAME_PATTERN.match(str(value or "")))
 
 
 def ensure_within_directory(base: Path, candidate: Path) -> Path:
@@ -563,6 +661,8 @@ def target_output_dir(output: Path, target: str) -> Path:
     marker = output_resolved / RUN_MARKER_FILENAME
     if marker.exists() and _run_marker_matches(marker, target):
         return output_resolved
+    if _is_artifact_target_name(target):
+        return ensure_within_directory(output, output / target)
     return ensure_within_directory(output, output / normalize_target(target))
 
 
@@ -1241,7 +1341,7 @@ def setup_logging(domain: str, output: Path, module_name: str) -> logging.Logger
     call.  Subsequent calls for the same domain attach to the existing root
     logger and just add a module-specific prefix.
     """
-    safe_domain = normalize_target(domain)
+    safe_domain = domain if _is_artifact_target_name(domain) else normalize_target(domain)
     log_dir = target_output_dir(output, safe_domain) / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
 

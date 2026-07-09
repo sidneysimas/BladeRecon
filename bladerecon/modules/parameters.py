@@ -18,7 +18,7 @@ from rich.console import Console
 
 console = Console()
 
-from .utils import ModuleResult, async_retry, deduplicate_parameters, info, log_duration, normalize_target, prepare_module_output, print_module_summary, setup_logging, skipped_result, skip, success, target_output_dir, warn, write_json, write_jsonl
+from .utils import ModuleResult, async_retry, deduplicate_parameters, info, log_duration, normalize_target, prepare_module_output, print_module_summary, safe_artifact_target_name, setup_logging, skipped_result, skip, success, target_output_dir, warn, write_json, write_jsonl
 
 SOURCE_TIMEOUT = 10.0
 SOURCE_RETRIES = 0
@@ -264,7 +264,7 @@ def run(target: str, output: Path, wordlist: Optional[Path] = None, resume: bool
     URLs (one per line).
     """
     target_path = Path(target)
-    target_name = target_path.stem if target_path.exists() else normalize_target(target)
+    target_name = safe_artifact_target_name(target_path.stem, "file") if target_path.exists() else normalize_target(target)
     out_dir = prepare_module_output(output, target_name, "parameters", resume=resume)
     log = setup_logging(target_name, output, "parameters")
     started = time.perf_counter()
