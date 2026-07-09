@@ -220,11 +220,12 @@ def _parse_markup(text: str) -> BeautifulSoup:
 
 
 def _extract_script_urls(html: str, base_url: str) -> List[str]:
-    """Extract and normalize external script URLs from HTML."""
+    """Extract and normalize external JavaScript URLs from HTML."""
     urls: List[str] = []
     try:
         soup = _parse_markup(html)
         scripts = soup.find_all("script", src=True)
+        links = soup.find_all("link", href=True)
     except Exception:
         return []
     for script in scripts:
@@ -234,6 +235,18 @@ def _extract_script_urls(html: str, base_url: str) -> List[str]:
         absolute = urljoin(base_url, src)
         parsed = urlparse(absolute)
         if parsed.scheme in {"http", "https"} and parsed.netloc:
+            urls.append(absolute.split("#", 1)[0])
+    for link in links:
+        href = str(link.get("href") or "").strip()
+        rel_values = {str(item).lower() for item in (link.get("rel") or [])}
+        as_value = str(link.get("as") or "").strip().lower()
+        if not href or href.startswith(("data:", "javascript:")):
+            continue
+        if not ({"modulepreload", "preload", "prefetch"} & rel_values or as_value == "script"):
+            continue
+        absolute = urljoin(base_url, href)
+        parsed = urlparse(absolute)
+        if parsed.scheme in {"http", "https"} and parsed.netloc and parsed.path.lower().endswith((".js", ".mjs")):
             urls.append(absolute.split("#", 1)[0])
     return dedupe_preserve_order(urls)
 

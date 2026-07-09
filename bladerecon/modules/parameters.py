@@ -195,7 +195,7 @@ def _load_text_urls(path: Path, source: str, source_map: Dict[str, List[str]]) -
         return
 
 
-def _collect_fallback_urls(target_name: str, output: Path) -> Tuple[List[str], Dict[str, int]]:
+def _collect_fallback_urls(target_name: str, output: Path) -> Tuple[List[str], Dict[str, int], Dict[str, List[str]]]:
     target_dir = target_output_dir(output, target_name)
     source_map: Dict[str, List[str]] = {}
 
@@ -207,6 +207,8 @@ def _collect_fallback_urls(target_name: str, output: Path) -> Tuple[List[str], D
     _load_text_urls(target_dir / "probe" / "alive.txt", "Live Discovered", source_map)
 
     inventory_paths = [
+        target_dir / "historical" / "urls.txt",
+        target_dir / "historical" / "urls.json",
         target_dir / "urls" / "urls.txt",
         target_dir / "urls" / "urls.json",
         target_dir / "crawl" / "urls.txt",
@@ -216,13 +218,15 @@ def _collect_fallback_urls(target_name: str, output: Path) -> Tuple[List[str], D
     ]
     for path in inventory_paths:
         if path.suffix == ".json":
-            _load_json_urls(path, "Internal URL Inventory", source_map)
+            source = "Historical URL Inventory" if path.parent.name == "historical" else "Internal URL Inventory"
+            _load_json_urls(path, source, source_map)
         else:
-            _load_text_urls(path, "Internal URL Inventory", source_map)
+            source = "Historical URL Inventory" if path.parent.name == "historical" else "Internal URL Inventory"
+            _load_text_urls(path, source, source_map)
 
     counts = {source: len(list(dict.fromkeys(urls))) for source, urls in source_map.items() if urls}
     urls = list(dict.fromkeys(url for urls_for_source in source_map.values() for url in urls_for_source))
-    return urls[:MAX_SOURCE_URLS], counts
+    return urls[:MAX_SOURCE_URLS], counts, source_map
 
 
 def _has_local_attack_surface(target_name: str, output: Path) -> bool:
@@ -257,6 +261,18 @@ async def _extract_params_from_urls(urls: List[str]) -> Set[str]:
     return params
 
 
+def _extract_params_sync(urls: List[str]) -> Set[str]:
+    params: Set[str] = set()
+    for url in urls:
+        try:
+            parsed = urlparse(url)
+            for key in parse_qs(parsed.query).keys():
+                params.add(key)
+        except Exception:
+            continue
+    return params
+
+
 def run(target: str, output: Path, wordlist: Optional[Path] = None, resume: bool = False) -> ModuleResult:
     """Run parameter discovery.
 
@@ -276,9 +292,12 @@ def run(target: str, output: Path, wordlist: Optional[Path] = None, resume: bool
         info("Loading target")
         urls: List[str] = []
         used_sources: List[str] = []
+        confirmed_urls: List[str] = []
+        historical_urls: List[str] = []
         if target_path.exists():
             # assume file of URLs
             urls = [l.strip() for l in target_path.read_text(encoding="utf-8").splitlines() if l.strip()]
+            confirmed_urls = urls
             used_sources = ["Input File"] if urls else []
             success(f"Loaded {len(urls)} URLs from file")
         else:
@@ -287,21 +306,30 @@ def run(target: str, output: Path, wordlist: Optional[Path] = None, resume: bool
                 _run_source("Common Crawl", _fetch_commoncrawl(target)),
             )
             urls = list(wayback_urls) + list(commoncrawl_urls)
+            historical_urls = list(urls)
             source_counts = {
                 "Wayback": len(wayback_urls),
                 "Common Crawl": len(commoncrawl_urls),
             }
             if not urls:
                 info("Attempting fallback URL collection")
-                fallback_urls, fallback_counts = _collect_fallback_urls(target_name, output)
+                fallback_urls, fallback_counts, fallback_source_map = _collect_fallback_urls(target_name, output)
                 for source, count in fallback_counts.items():
                     info(f"{source} URLs loaded: {count}")
                 info(f"Total fallback URLs collected: {len(fallback_urls)}")
                 urls = fallback_urls
                 source_counts.update(fallback_counts)
+                confirmed_sources = {"Live Discovered", "Endpoint Discovery", "JavaScript Analysis", "Internal URL Inventory"}
+                for source, values in fallback_source_map.items():
+                    if source in confirmed_sources:
+                        confirmed_urls.extend(values)
+                    else:
+                        historical_urls.extend(values)
             used_sources = [source for source, count in source_counts.items() if count > 0]
 
         urls = list(dict.fromkeys(urls))
+        confirmed_urls = list(dict.fromkeys(confirmed_urls))
+        historical_urls = list(dict.fromkeys(historical_urls))
         log.info("Collected %d source URLs for parameter extraction", len(urls))
         info(f"Collected {len(urls)} URLs for parameter extraction")
         if not urls:
@@ -321,6 +349,9 @@ def run(target: str, output: Path, wordlist: Optional[Path] = None, resume: bool
             return result
 
         found = await _extract_params_from_urls(urls)
+        confirmed = _extract_params_sync(confirmed_urls)
+        historical = _extract_params_sync(historical_urls)
+        historical = {item for item in historical if item.lower() not in {p.lower() for p in confirmed}}
         if not found and not _has_local_attack_surface(target_name, output):
             result = skipped_result("No URL-derived parameters or local attack surface available")
             skip("Parameter discovery skipped")
@@ -342,6 +373,8 @@ def run(target: str, output: Path, wordlist: Optional[Path] = None, resume: bool
         common = _load_common_params()
         custom = _load_custom_params(wordlist)
         merged = deduplicate_parameters([*sorted(found), *sorted(common), *sorted(custom)])
+        found_lower = {item.lower() for item in found}
+        candidates = [item for item in merged if item.lower() not in found_lower]
         info(f"Parameters found: {len(found)} from URLs; {len(merged)} after wordlist merge")
 
         info("Writing parameter outputs")
@@ -349,9 +382,28 @@ def run(target: str, output: Path, wordlist: Optional[Path] = None, resume: bool
         info("Writing parameters.txt")
         (out_dir / "parameters.txt").write_text("\n".join(merged), encoding="utf-8")
         (out_dir / "parameters_from_urls.txt").write_text("\n".join(sorted(found)), encoding="utf-8")
+        (out_dir / "parameters_confirmed.txt").write_text("\n".join(sorted(confirmed)), encoding="utf-8")
+        (out_dir / "parameters_historical.txt").write_text("\n".join(sorted(historical)), encoding="utf-8")
+        (out_dir / "parameters_candidate.txt").write_text("\n".join(candidates), encoding="utf-8")
         info("Writing parameters.json")
-        write_json(out_dir / "parameters.json", [{"parameter": item} for item in merged])
-        write_jsonl(out_dir / "parameters.jsonl", [{"parameter": item} for item in merged])
+        classes = {
+            **{item.lower(): "confirmed" for item in confirmed},
+            **{item.lower(): "historical" for item in historical},
+            **{item.lower(): "candidate" for item in candidates},
+        }
+        write_json(out_dir / "parameters.json", [{"parameter": item, "class": classes.get(item.lower(), "candidate")} for item in merged])
+        write_jsonl(out_dir / "parameters.jsonl", [{"parameter": item, "class": classes.get(item.lower(), "candidate")} for item in merged])
+        write_json(
+            out_dir / "metadata.json",
+            {
+                "source_counts": {source: len([url for url in values if url]) for source, values in {"confirmed": confirmed_urls, "historical": historical_urls}.items()},
+                "confirmed_count": len(confirmed),
+                "historical_count": len(historical),
+                "candidate_count": len(candidates),
+                "total_count": len(merged),
+                "used_sources": used_sources,
+            },
+        )
         if custom:
             (out_dir / "parameters_from_wordlist.txt").write_text("\n".join(sorted(custom)), encoding="utf-8")
         success("Parameter output files written")

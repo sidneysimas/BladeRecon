@@ -24,6 +24,22 @@ def test_find_secrets_detects_common_javascript_patterns() -> None:
     assert by_type["Google API Key"]["value_fingerprint"]
 
 
+def test_find_secrets_detects_useful_provider_tokens_without_raw_values() -> None:
+    content = """
+    const openai = "sk-proj-abcdefghijklmnopqrstuvwxyzABCDE_1234567890";
+    const gitlab = "glpat-abcdefghijklmnopqrst";
+    const sendgrid = "SG.abcdefghijklmnopqrstuv.abcdefghijklmnopqrstuvwxyz";
+    const aws_secret_access_key = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN";
+    """
+
+    findings = _find_secrets(content)
+    types = {item["type"] for item in findings}
+
+    assert {"OpenAI API Key", "GitLab Token", "SendGrid API Key", "AWS Secret Access Key"} <= types
+    assert all("value" not in item for item in findings)
+    assert all(item["redacted"] == "true" for item in findings)
+
+
 def test_secret_run_consumes_historical_js_secret_artifacts(tmp_path: Path) -> None:
     target = tmp_path / "example.com"
     (target / "js").mkdir(parents=True)

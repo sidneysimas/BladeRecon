@@ -172,10 +172,29 @@ def _load_subdomain_sources(target_dir: Path) -> Dict[str, List[str]]:
 
 
 def _load_parameters(target_dir: Path) -> List[str]:
+    rows = _load_parameter_rows(target_dir)
+    if rows:
+        return deduplicate_parameters(str(row.get("parameter") or "") for row in rows)
     f = target_dir / "parameters" / "parameters.txt"
     if not f.exists():
         return []
     return deduplicate_parameters(f.read_text(encoding="utf-8-sig").splitlines())
+
+
+def _load_parameter_rows(target_dir: Path) -> List[dict]:
+    rows = _load_json_list(target_dir / "parameters" / "parameters.json")
+    cleaned: List[dict] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        name = str(row.get("parameter") or "").strip()
+        if not name:
+            continue
+        param_class = str(row.get("class") or row.get("source_class") or "candidate").strip().lower()
+        if param_class not in {"confirmed", "historical", "candidate"}:
+            param_class = "candidate"
+        cleaned.append({"parameter": name, "class": param_class})
+    return cleaned
 
 
 def _load_discovered_parameters(target_dir: Path) -> List[str]:
@@ -194,16 +213,27 @@ def _parameter_value_level(name: str) -> str:
     return "Low"
 
 
-def _parameter_intelligence(parameters: List[str], discovered_parameters: List[str]) -> dict:
+def _parameter_intelligence(parameters: List[str], discovered_parameters: List[str], parameter_rows: Optional[List[dict]] = None) -> dict:
     discovered_set = {item.lower() for item in discovered_parameters}
-    candidates = [item for item in parameters if item.lower() not in discovered_set]
+    class_map: Dict[str, str] = {}
+    if parameter_rows:
+        class_map = {str(row.get("parameter") or "").lower(): str(row.get("class") or "candidate").lower() for row in parameter_rows}
+    confirmed = [item for item in parameters if class_map.get(item.lower()) == "confirmed"]
+    historical = [item for item in parameters if class_map.get(item.lower()) == "historical"]
+    candidates = [item for item in parameters if class_map.get(item.lower(), "candidate" if item.lower() not in discovered_set else "confirmed") == "candidate"]
+    if not parameter_rows:
+        confirmed = discovered_parameters
     levels = {"High": [], "Medium": [], "Low": []}
     for item in parameters:
         levels[_parameter_value_level(item)].append(item)
     return {
         "discovered": discovered_parameters,
+        "confirmed": confirmed,
+        "historical": historical,
         "candidates": candidates,
         "discovered_count": len(discovered_parameters),
+        "confirmed_count": len(confirmed),
+        "historical_count": len(historical),
         "candidate_count": len(candidates),
         "total_count": len(parameters),
         "high_value": levels["High"],
@@ -1296,6 +1326,8 @@ def _render_markdown(context: dict, out_md: Path) -> None:
     param_intel = context.get("parameter_intelligence", {})
     if not context.get("parameters_skipped_reason"):
         lines.append(f"- Discovered parameters: {param_intel.get('discovered_count', 0)}")
+        lines.append(f"- Confirmed parameters: {param_intel.get('confirmed_count', 0)}")
+        lines.append(f"- Historical parameters: {param_intel.get('historical_count', 0)}")
         lines.append(f"- Candidate parameters: {param_intel.get('candidate_count', 0)}")
     lines.append(f"- Screenshots: {context.get('screenshots_status', len(context.get('screenshots', [])))}")
     md_vulns = sum(len(v) for v in context.get('nuclei', {}).values())
@@ -1567,6 +1599,8 @@ def _render_markdown(context: dict, out_md: Path) -> None:
         lines.append("## Interesting Parameters")
         lines.append("")
         lines.append(f"- Discovered Parameters: {param_intel.get('discovered_count', 0)}")
+        lines.append(f"- Confirmed Parameters: {param_intel.get('confirmed_count', 0)}")
+        lines.append(f"- Historical Parameters: {param_intel.get('historical_count', 0)}")
         lines.append(f"- Candidate Parameters: {param_intel.get('candidate_count', 0)}")
         lines.append(f"- Total Parameters: {param_intel.get('total_count', 0)}")
         lines.append(f"- High Value Parameters: {param_intel.get('high_count', 0)}")
@@ -1761,7 +1795,9 @@ def run(target: str, output: Path = Path("results"), scan_duration: Optional[str
         parameters_skipped_reason = _normalize_skip_reason(str(parameter_state.get("error") or "No URLs available for extraction"))
         parameters = []
         discovered_parameters = []
+        parameter_rows = []
     else:
+        parameter_rows = _load_parameter_rows(target_dir)
         parameters = _load_parameters(target_dir)
         discovered_parameters = _load_discovered_parameters(target_dir)
     screenshots_skipped_reason = ""
@@ -1800,7 +1836,7 @@ def run(target: str, output: Path = Path("results"), scan_duration: Optional[str
     nuclei_grouped = _group_findings_by_severity(nuclei_findings)
     nuclei_count = sum(len(items) for items in nuclei_grouped.values())
     interesting = _interesting_parameters(parameters)
-    parameter_intelligence = _parameter_intelligence(parameters, discovered_parameters)
+    parameter_intelligence = _parameter_intelligence(parameters, discovered_parameters, parameter_rows)
     screenshots_status = (
         f"Skipped ({screenshots_skipped_reason})"
         if screenshots_skipped_reason
@@ -1831,6 +1867,7 @@ def run(target: str, output: Path = Path("results"), scan_duration: Optional[str
         "screenshots_status": screenshots_status,
         "live_status": live_status,
         "parameters": parameters,
+        "parameter_rows": parameter_rows,
         "discovered_parameters": discovered_parameters,
         "parameter_intelligence": parameter_intelligence,
         "parameters_status": parameters_status,

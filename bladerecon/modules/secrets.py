@@ -13,13 +13,19 @@ from .utils import atomic_write_text, info, log_duration, prepare_module_output,
 SECRET_PATTERNS: Tuple[Tuple[str, Pattern[str]], ...] = (
     ("Private Key", re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----")),
     ("AWS Access Key", re.compile(r"\bAKIA[0-9A-Z]{16}\b")),
+    ("AWS Secret Access Key", re.compile(r"(?i)\b(?:aws[_-]?secret[_-]?access[_-]?key|aws[_-]?secret|secretAccessKey)\b\s*[:=]\s*['\"](?P<secret>[A-Za-z0-9/+=]{40})['\"]")),
     ("Google API Key", re.compile(r"\bAIza[0-9A-Za-z_-]{35}\b")),
+    ("OpenAI API Key", re.compile(r"\bsk-(?:proj-)?[A-Za-z0-9_-]{32,}\b")),
     ("Stripe Key", re.compile(r"\b(?:sk|pk)_(?:live|test)_[0-9A-Za-z]{16,}\b")),
     ("JWT Token", re.compile(r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b")),
     ("Bearer Token", re.compile(r"\bBearer\s+[A-Za-z0-9._~+/=-]{20,}\b", re.IGNORECASE)),
     ("Webhook URL", re.compile(r"https://hooks\.(?:slack|discord)\.com/[A-Za-z0-9/_?=&.-]+", re.IGNORECASE)),
     ("Slack Token", re.compile(r"\bxox[baprs]-[A-Za-z0-9-]{10,}\b")),
     ("GitHub Token", re.compile(r"\bgh[pousr]_[A-Za-z0-9_]{20,}\b")),
+    ("GitHub Fine-Grained Token", re.compile(r"\bgithub_pat_[A-Za-z0-9_]{22,}_[A-Za-z0-9_]{59,}\b")),
+    ("GitLab Token", re.compile(r"\bglpat-[A-Za-z0-9_-]{20,}\b")),
+    ("SendGrid API Key", re.compile(r"\bSG\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\b")),
+    ("Mailgun API Key", re.compile(r"\bkey-[0-9a-f]{32}\b", re.IGNORECASE)),
     ("Generic API Key", re.compile(r"(?i)\b(?:api[_-]?key|access[_-]?token|client[_-]?secret)\b\s*[:=]\s*['\"][A-Za-z0-9_\-./+=]{16,}['\"]")),
 )
 
@@ -30,11 +36,15 @@ def _secret_confidence(secret_type: str) -> str:
         "Slack Token",
         "GitHub Token",
         "GitLab Token",
+        "GitHub Fine-Grained Token",
+        "OpenAI API Key",
         "Private Key",
         "JWT Token",
         "Webhook URL",
+        "SendGrid API Key",
+        "Mailgun API Key",
     }
-    medium = {"Bearer Token", "Session Token", "OAuth Token", "Stripe Key"}
+    medium = {"AWS Secret Access Key", "Bearer Token", "Session Token", "OAuth Token", "Stripe Key"}
     if secret_type in high:
         return "HIGH"
     if secret_type in medium:
@@ -117,7 +127,7 @@ def _find_secrets(content: str) -> List[Dict[str, str]]:
     findings: List[Dict[str, str]] = []
     for secret_type, pattern in SECRET_PATTERNS:
         for match in pattern.finditer(content):
-            value = match.group(0)
+            value = match.groupdict().get("secret") or match.group(0)
             confidence = _secret_confidence(secret_type)
             findings.append(_redacted_finding(secret_type, value, confidence))
     return findings

@@ -30,6 +30,21 @@ def test_extract_script_urls_handles_xml_like_documents() -> None:
     ]
 
 
+def test_extract_script_urls_includes_preload_and_modulepreload_links() -> None:
+    html = """
+    <link rel="modulepreload" href="/assets/app.mjs">
+    <link rel="preload" as="script" href="/assets/chunk.js#v1">
+    <link rel="prefetch" href="/assets/next.js">
+    <link rel="stylesheet" href="/assets/app.css">
+    """
+
+    assert _extract_script_urls(html, "https://example.com/") == [
+        "https://example.com/assets/app.mjs",
+        "https://example.com/assets/chunk.js",
+        "https://example.com/assets/next.js",
+    ]
+
+
 def test_prioritize_alive_hosts_prefers_real_pages_over_404s() -> None:
     alive = [
         "https://missing.example.com",

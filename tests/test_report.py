@@ -388,6 +388,34 @@ def test_report_rendering_with_minimal_outputs(tmp_path: Path) -> None:
     assert "![](../screenshots/www.example.com.png)" in md
 
 
+def test_report_distinguishes_parameter_classes(tmp_path: Path) -> None:
+    target = tmp_path / "example.com"
+    (target / "parameters").mkdir(parents=True)
+    (target / "parameters" / "parameters.txt").write_text("id\nlegacy\npage\n", encoding="utf-8")
+    (target / "parameters" / "parameters_from_urls.txt").write_text("id\nlegacy\n", encoding="utf-8")
+    (target / "parameters" / "parameters.json").write_text(
+        json.dumps(
+            [
+                {"parameter": "id", "class": "confirmed"},
+                {"parameter": "legacy", "class": "historical"},
+                {"parameter": "page", "class": "candidate"},
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    report.run("example.com", output=tmp_path)
+
+    html = (target / "reports" / "report.html").read_text(encoding="utf-8")
+    md = (target / "reports" / "report.md").read_text(encoding="utf-8")
+    assert "Confirmed Parameters" in html
+    assert "Historical Parameters" in html
+    assert "Candidate Parameters" in html
+    assert "- Confirmed Parameters: 1" in md
+    assert "- Historical Parameters: 1" in md
+    assert "- Candidate Parameters: 1" in md
+
+
 def test_report_prefers_latest_isolated_run_over_legacy_target_dir(tmp_path: Path) -> None:
     legacy_target = tmp_path / "example.com"
     legacy_target.mkdir(parents=True)

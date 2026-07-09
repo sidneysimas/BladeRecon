@@ -62,6 +62,20 @@ def test_extract_endpoints_detects_bundle_route_properties_without_leading_slash
     assert "https://app.example.com/v2/profile" in endpoints
 
 
+def test_extract_endpoints_detects_method_property_objects() -> None:
+    content = """
+    const routes = [
+      { method: 'GET', url: 'api/search' },
+      { verb: "POST", path: "/oauth/token" }
+    ];
+    """
+
+    endpoints = set(_extract_endpoints(content, "https://app.example.com/assets/bundle.js"))
+
+    assert "https://app.example.com/api/search" in endpoints
+    assert "https://app.example.com/oauth/token" in endpoints
+
+
 def test_endpoint_run_keeps_source_file_attribution(tmp_path: Path) -> None:
     target = tmp_path / "example.com"
     js_dir = target / "js" / "files"

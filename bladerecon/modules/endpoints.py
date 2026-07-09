@@ -34,21 +34,34 @@ ENDPOINT_HINTS = (
     "ws://",
     "wss://",
     "socket.io",
+    "oauth",
+    "sso",
+    "me",
+    "profile",
+    "account",
+    "orders",
+    "payments",
+    "billing",
 )
 
 ABSOLUTE_URL_RE = re.compile(r"(?:https?|wss?)://[A-Za-z0-9._~:/?#\[\]@!$&'()*+,;=%-]+")
-RELATIVE_RE = re.compile(r"(?P<quote>['\"`])(?P<path>/(?:api|v[0-9]+|graphql|rest|auth|login|logout|register|users|admin|api-docs|swagger|swagger-ui|openapi|socket\.io)[A-Za-z0-9._~:/?#\[\]@!$&()*+,;=%{}-]*)\1", re.IGNORECASE)
+ROUTE_WORDS = r"(?:api|v[0-9]+|graphql|rest|auth|oauth|sso|login|logout|register|users?|me|profile|accounts?|admin|orders?|payments?|billing|api-docs|swagger|swagger-ui|openapi|socket\.io)"
+RELATIVE_RE = re.compile(rf"(?P<quote>['\"`])(?P<path>/(?:{ROUTE_WORDS})[A-Za-z0-9._~:/?#\[\]@!$&()*+,;=%{{}}-]*)\1", re.IGNORECASE)
 ROUTE_PROPERTY_RE = re.compile(
-    r"(?:url|path|route|endpoint|uri|baseURL|baseUrl)\s*:\s*(?P<quote>['\"`])(?P<path>/?(?:api|v[0-9]+|graphql|rest|auth|login|logout|register|users|admin|api-docs|swagger|swagger-ui|openapi|socket\.io)[A-Za-z0-9._~:/?#\[\]@!$&()*+,;=%{}-]*)\1",
+    rf"(?:url|path|route|endpoint|uri|baseURL|baseUrl)\s*:\s*(?P<quote>['\"`])(?P<path>/?(?:{ROUTE_WORDS})[A-Za-z0-9._~:/?#\[\]@!$&()*+,;=%{{}}-]*)\1",
+    re.IGNORECASE,
+)
+METHOD_PROPERTY_RE = re.compile(
+    rf"(?:method|verb)\s*:\s*(?P<method_quote>['\"`])(?:GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)(?P=method_quote)\s*,\s*(?:url|path|route|endpoint|uri)\s*:\s*(?P<quote>['\"`])(?P<path>/?(?:{ROUTE_WORDS})[A-Za-z0-9._~:/?#\[\]@!$&()*+,;=%{{}}-]*)(?P=quote)",
     re.IGNORECASE,
 )
 DOC_FILE_RE = re.compile(r"(?P<quote>['\"`])(?P<path>/?[A-Za-z0-9._~:/-]*(?:swagger|openapi)(?:-[A-Za-z0-9._~-]+)?\.json)\1", re.IGNORECASE)
 CALL_RE = re.compile(
-    r"(?:fetch|axios\.(?:get|post|put|delete|patch|request)|[A-Za-z0-9_$]+\.(?:get|post|put|delete|patch|request|open)|new\s+WebSocket|io)\s*\(\s*(?P<arg>[^,\)\n]+)",
+    r"(?:fetch|axios(?:\.(?:get|post|put|delete|patch|request))?|[A-Za-z0-9_$]+\.(?:get|post|put|delete|patch|request|open)|new\s+WebSocket|io)\s*\(\s*(?P<arg>[^,\)\n]+)",
     re.IGNORECASE,
 )
-TEMPLATE_PATH_RE = re.compile(r"(?P<path>/(?:api|v[0-9]+|graphql|rest|auth|login|logout|register|users|admin|api-docs|swagger|swagger-ui|openapi|socket\.io)[A-Za-z0-9._~:/?#\[\]@!$&()*+,;=%{}-]*)", re.IGNORECASE)
-ROUTE_PREFIX_RE = re.compile(r"^(?:api|v[0-9]+|graphql|rest|auth|login|logout|register|users|admin|api-docs|swagger|swagger-ui|openapi|socket\.io)(?:$|[/?#._:-])", re.IGNORECASE)
+TEMPLATE_PATH_RE = re.compile(rf"(?P<path>/(?:{ROUTE_WORDS})[A-Za-z0-9._~:/?#\[\]@!$&()*+,;=%{{}}-]*)", re.IGNORECASE)
+ROUTE_PREFIX_RE = re.compile(rf"^(?:{ROUTE_WORDS})(?:$|[/?#._:-])", re.IGNORECASE)
 
 
 def _load_js_rows(target_dir: Path) -> List[dict]:
@@ -139,6 +152,9 @@ def _candidate_from_call_arg(arg: str) -> List[str]:
         candidates.extend(match.group("path") for match in TEMPLATE_PATH_RE.finditer(value))
     elif value.startswith("{"):
         candidates.extend(match.group("path") for match in RELATIVE_RE.finditer(value))
+    else:
+        candidates.extend(match.group("path") for match in RELATIVE_RE.finditer(value))
+        candidates.extend(match.group("path") for match in TEMPLATE_PATH_RE.finditer(value))
     return candidates
 
 
@@ -150,6 +166,8 @@ def _extract_endpoint_items(content: str, source_url: str) -> List[Dict[str, str
     for match in RELATIVE_RE.finditer(content):
         candidates.append(_normalize_endpoint(match.group("path"), source_url))
     for match in ROUTE_PROPERTY_RE.finditer(content):
+        candidates.append(_normalize_endpoint(match.group("path"), source_url))
+    for match in METHOD_PROPERTY_RE.finditer(content):
         candidates.append(_normalize_endpoint(match.group("path"), source_url))
     for match in DOC_FILE_RE.finditer(content):
         candidates.append(_normalize_endpoint(match.group("path"), source_url))

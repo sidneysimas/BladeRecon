@@ -989,6 +989,7 @@
         jsFiles: {{ js_files | tojson }},
         endpoints: {{ endpoints | tojson }},
         parameters: {{ parameters | tojson }},
+        parameterRows: {{ parameter_rows | tojson }},
         parameterIntel: {{ parameter_intelligence | tojson }},
         parametersSkippedReason: {{ parameters_skipped_reason | tojson }},
         secrets: {{ secrets | tojson }},
@@ -1001,6 +1002,7 @@
         screenshotsSkippedReason: {{ screenshots_skipped_reason | tojson }}
       };
       const discoveredParameterSet = new Set((data.parameterIntel.discovered || []).map((item) => String(item).toLowerCase()));
+      const parameterClassMap = new Map((data.parameterRows || []).map((item) => [String(item.parameter || '').toLowerCase(), String(item.class || 'candidate')]));
 
       const escapeHtml = (value) => String(value ?? '')
         .replaceAll('&', '&amp;')
@@ -1035,7 +1037,12 @@
       }
 
       function parameterSource(name) {
-        return discoveredParameterSet.has(String(name || '').toLowerCase()) ? 'Discovered' : 'Candidate';
+        const key = String(name || '').toLowerCase();
+        const cls = parameterClassMap.get(key);
+        if (cls === 'confirmed') return 'Confirmed';
+        if (cls === 'historical') return 'Historical';
+        if (cls === 'candidate') return 'Candidate';
+        return discoveredParameterSet.has(key) ? 'Confirmed' : 'Candidate';
       }
 
       function subdomainCategory(host) {
@@ -1146,10 +1153,13 @@
             const level = parameterValueLevel(item);
             const categoryCls = category === 'Authentication' ? 'high' : category === 'Files' ? 'medium' : category === 'Redirect' ? 'info' : 'passive';
             const levelCls = level === 'High' ? 'high' : level === 'Medium' ? 'medium' : 'low';
-            return `<tr><td>${code(item)}</td><td>${categoryBadge(source, source === 'Discovered' ? 'alive' : 'passive')}</td><td>${categoryBadge(level, levelCls)}</td><td>${categoryBadge(category, categoryCls)}</td></tr>`;
+            const sourceCls = source === 'Confirmed' ? 'alive' : source === 'Historical' ? 'info' : 'passive';
+            return `<tr><td>${code(item)}</td><td>${categoryBadge(source, sourceCls)}</td><td>${categoryBadge(level, levelCls)}</td><td>${categoryBadge(category, categoryCls)}</td></tr>`;
           });
           const intelligence = summaryChips([
             ['Discovered Parameters', intel.discovered_count || 0],
+            ['Confirmed Parameters', intel.confirmed_count || 0],
+            ['Historical Parameters', intel.historical_count || 0],
             ['Candidate Parameters', intel.candidate_count || 0],
             ['Total Parameters', intel.total_count || 0],
             ['High Value Parameters', intel.high_count || 0],
