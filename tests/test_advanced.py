@@ -47,6 +47,26 @@ def test_security_header_assets_classify_csp_hosts() -> None:
     assert by_host["cdn.example.net"] == "CDN"
 
 
+def test_security_header_assets_do_not_fetch_dead_probe_rows(tmp_path: Path) -> None:
+    target = tmp_path / "example.com"
+    (target / "probe").mkdir(parents=True)
+    (target / "probe" / "probe.json").write_text(
+        json.dumps(
+            [
+                {"url": "https://dead.example.com", "alive": False, "status_code": 0},
+                {"url": "https://blocked.example.com", "alive": False, "status_code": 0, "headers": {}},
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    payload, requests = asyncio.run(advanced.collect_security_header_assets("example.com", tmp_path, {}, "safe"))
+
+    assert requests == 0
+    assert payload["requests_sent"] == 0
+    assert payload["assets"] == []
+
+
 def test_asset_priority_scores_high_interest_assets(tmp_path: Path) -> None:
     target = tmp_path / "example.com"
     (target / "probe").mkdir(parents=True)

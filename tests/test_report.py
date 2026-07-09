@@ -472,7 +472,16 @@ def test_report_duration_uses_module_total_when_recorded_duration_is_too_small(t
     run_dir = create_scan_run_output_dir(tmp_path, "example.com", "safe")
     (run_dir / "logs").mkdir()
     (run_dir / "logs" / "scan_meta.json").write_text(
-        '{"duration_human":"0.07s","duration_seconds":0.07}',
+        json.dumps(
+            {
+                "duration_human": "0.07s",
+                "duration_seconds": 0.07,
+                "performance": {
+                    "scan_start_time": "2026-05-31T11:30:39Z",
+                    "scan_end_time": "2026-05-31T11:30:39Z",
+                },
+            }
+        ),
         encoding="utf-8",
     )
     (run_dir / "scan_state.json").write_text(
@@ -480,9 +489,30 @@ def test_report_duration_uses_module_total_when_recorded_duration_is_too_small(t
             {
                 "scan_profile": "safe",
                 "modules": {
-                    "probe": {"status": "completed", "duration_seconds": 65.0},
-                    "advanced": {"status": "completed", "duration_seconds": 125.5},
-                    "report": {"status": "completed", "duration_seconds": 0.07},
+                    "probe": {
+                        "status": "completed",
+                        "duration_seconds": 65.0,
+                        "performance": {
+                            "scan_start_time": "2026-05-31T10:00:00Z",
+                            "scan_end_time": "2026-05-31T10:01:05Z",
+                        },
+                    },
+                    "advanced": {
+                        "status": "completed",
+                        "duration_seconds": 125.5,
+                        "performance": {
+                            "scan_start_time": "2026-05-31T10:01:05Z",
+                            "scan_end_time": "2026-05-31T10:03:10Z",
+                        },
+                    },
+                    "report": {
+                        "status": "completed",
+                        "duration_seconds": 0.07,
+                        "performance": {
+                            "scan_start_time": "2026-05-31T11:30:39Z",
+                            "scan_end_time": "2026-05-31T11:30:39Z",
+                        },
+                    },
                 },
             }
         ),
@@ -494,7 +524,10 @@ def test_report_duration_uses_module_total_when_recorded_duration_is_too_small(t
     md = (run_dir / "reports" / "report.md").read_text(encoding="utf-8")
     assert "- Scan duration: 190.50s" in md
     assert "- Total Duration: 190.50s" in md
+    assert "- Scan Start Time: 2026-05-31 10:00:00 UTC" in md
+    assert "- Scan End Time: 2026-05-31 10:03:10 UTC" in md
     assert "- Scan duration: 0.07s" not in md
+    assert "- Scan Start Time: 2026-05-31 11:30:39 UTC" not in md
 
 
 def test_report_uses_newest_valid_run_when_latest_pointer_is_malformed(tmp_path: Path) -> None:

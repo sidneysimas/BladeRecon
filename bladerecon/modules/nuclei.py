@@ -1173,9 +1173,15 @@ def run(
             max_hosts=roi_max_targets,
         )
         roi_scoped_targets = roi_target_scope.get("scoped_targets")
-        if roi_scoped_targets is not None and int(roi_scoped_targets or 0) == 0:
+        roi_scope_reason = str(roi_target_scope.get("reason") or "")
+        no_roi_hosts_for_baseline = (
+            roi_scoped_targets is None
+            and not roi_target_scope.get("enabled")
+            and roi_scope_reason in {"no ROI opportunity hosts", "no current nuclei targets"}
+        )
+        if no_roi_hosts_for_baseline or (roi_scoped_targets is not None and int(roi_scoped_targets or 0) == 0):
             duration = time.perf_counter() - started
-            reason = str(roi_target_scope.get("reason") or "baseline-only scan skipped: no ROI-scoped targets")
+            reason = roi_scope_reason or "baseline-only scan skipped: no ROI-scoped targets"
             metadata = {
                 "profile": profile,
                 "status": "skipped",

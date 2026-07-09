@@ -689,6 +689,16 @@ def _extract_header_assets(headers: Dict[str, str], root: str, source_url: str) 
     return rows
 
 
+def _probe_row_is_live(row: Dict[str, Any]) -> bool:
+    if row.get("alive") is True:
+        return True
+    try:
+        status = int(row.get("status_code") or 0)
+    except (TypeError, ValueError):
+        return False
+    return status in {200, 201, 202, 204, 301, 302, 307, 308, 401, 403}
+
+
 def _classify_external_asset(host: str) -> str:
     value = host.lower()
     if any(token in value for token in ("auth", "login", "okta", "onelogin", "auth0")):
@@ -716,7 +726,7 @@ async def collect_security_header_assets(target: str, output: Path, config: dict
         source = str(row.get("final_url") or row.get("url") or "")
         if headers:
             assets.extend(_extract_header_assets({str(k): str(v) for k, v in headers.items()}, root, source))
-        elif source:
+        elif source and _probe_row_is_live(row):
             needs_live.append(source)
 
     ceiling = get_profiled_ceiling("security_header_hosts", int(config_get(config, "advanced.security_headers.max_hosts", 20)), profile, config)

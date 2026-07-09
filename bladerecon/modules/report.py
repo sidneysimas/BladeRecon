@@ -887,6 +887,19 @@ def _display_time(value: object) -> str:
         return raw
 
 
+def _parse_report_time(value: object) -> Optional[datetime]:
+    raw = str(value or "").strip()
+    if not raw or raw == "Not recorded":
+        return None
+    try:
+        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc)
+    except Exception:
+        return None
+
+
 def _duration_seconds(value: object) -> Optional[float]:
     if value is None:
         return None
@@ -918,6 +931,29 @@ def _module_total_duration(scan_state: dict) -> float:
         except (TypeError, ValueError):
             continue
     return round(total, 2)
+
+
+def _module_scan_time_bounds(scan_state: dict) -> Optional[Tuple[str, str]]:
+    modules = scan_state.get("modules", {}) if isinstance(scan_state, dict) else {}
+    if not isinstance(modules, dict):
+        return None
+    starts: List[Tuple[datetime, str]] = []
+    ends: List[Tuple[datetime, str]] = []
+    for name, state in modules.items():
+        if name == "report" or not isinstance(state, dict):
+            continue
+        perf = state.get("performance", {}) if isinstance(state.get("performance"), dict) else {}
+        start_raw = str(perf.get("scan_start_time") or "").strip()
+        end_raw = str(perf.get("scan_end_time") or "").strip()
+        start = _parse_report_time(start_raw)
+        end = _parse_report_time(end_raw)
+        if start:
+            starts.append((start, start_raw))
+        if end:
+            ends.append((end, end_raw))
+    if not starts or not ends:
+        return None
+    return min(starts, key=lambda item: item[0])[1], max(ends, key=lambda item: item[0])[1]
 
 
 def _scan_duration(scan_meta: dict, scan_state: dict, provided_duration: Optional[str] = None) -> str:
@@ -972,11 +1008,21 @@ def _build_performance(scan_meta: dict, scan_state: dict, target_dir: Path) -> D
     top_ram = sorted(active_rows, key=lambda row: float(row.get("peak_ram_mb") or 0.0), reverse=True)[:3]
     scan_start_raw = performance.get("scan_start_time", scan_meta.get("started_at", "Not recorded")) if isinstance(performance, dict) else "Not recorded"
     scan_end_raw = performance.get("scan_end_time", scan_meta.get("updated_at", "Not recorded")) if isinstance(performance, dict) else "Not recorded"
+    meta_seconds = _duration_seconds(scan_meta.get("duration_seconds")) if isinstance(scan_meta, dict) else None
+    if meta_seconds is None and isinstance(scan_meta, dict):
+        meta_seconds = _duration_seconds(scan_meta.get("duration_human"))
+    module_total = _module_total_duration(scan_state)
+    module_bounds = _module_scan_time_bounds(scan_state)
+    timing_source = "scan_meta"
+    if module_bounds and module_total > 0 and (meta_seconds is None or meta_seconds + 1.0 < module_total):
+        scan_start_raw, scan_end_raw = module_bounds
+        timing_source = "module_state"
     return {
         "scan_start_time": _display_time(scan_start_raw),
         "scan_start_time_raw": scan_start_raw,
         "scan_end_time": _display_time(scan_end_raw),
         "scan_end_time_raw": scan_end_raw,
+        "timing_source": timing_source,
         "total_duration": _scan_duration(scan_meta, scan_state),
         "peak_ram_mb": round(float(performance.get("peak_ram_mb") or 0.0), 2) if isinstance(performance, dict) else 0.0,
         "average_ram_mb": round(float(performance.get("average_ram_mb") or 0.0), 2) if isinstance(performance, dict) else 0.0,

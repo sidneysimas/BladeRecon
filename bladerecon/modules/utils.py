@@ -43,6 +43,8 @@ from rich.table import Table
 
 console = Console()
 
+_RUN_CREATE_SEQUENCE = 0
+
 F = TypeVar("F", bound=Callable[..., Any])
 
 PROJECT_NAME = "BladeRecon"
@@ -689,6 +691,8 @@ def _run_id(profile: str = "") -> str:
 
 def create_scan_run_output_dir(output: Path, target: str, profile: str = "") -> Path:
     """Create an isolated full-scan output directory for *target*."""
+    global _RUN_CREATE_SEQUENCE
+    _RUN_CREATE_SEQUENCE += 1
     safe_target = normalize_target(target)
     target_root = ensure_within_directory(output, output / safe_target)
     run_id = _run_id(profile)
@@ -700,6 +704,8 @@ def create_scan_run_output_dir(output: Path, target: str, profile: str = "") -> 
         "run_id": run_id,
         "profile": profile or "",
         "created_at": now_iso(),
+        "created_at_ns": time.time_ns(),
+        "created_sequence": _RUN_CREATE_SEQUENCE,
         "report_version": REPORT_VERSION,
     }
     write_json(run_dir / RUN_MARKER_FILENAME, marker)
@@ -729,6 +735,22 @@ def _run_marker_mtime_ns(run_dir: Path) -> int:
         return 0
 
 
+def _run_sort_key(run_dir: Path) -> Tuple[str, int, int, int, str]:
+    marker_data = _read_json_file_silent(run_dir / RUN_MARKER_FILENAME)
+    created_ns = 0
+    created_sequence = 0
+    if isinstance(marker_data, dict):
+        try:
+            created_ns = int(marker_data.get("created_at_ns") or 0)
+        except (TypeError, ValueError):
+            created_ns = 0
+        try:
+            created_sequence = int(marker_data.get("created_sequence") or 0)
+        except (TypeError, ValueError):
+            created_sequence = 0
+    return (_run_created_at(run_dir), created_ns, created_sequence, _run_marker_mtime_ns(run_dir), run_dir.name)
+
+
 def _iter_valid_run_dirs(target_root: Path, target: str) -> List[Path]:
     runs_dir = target_root / "runs"
     if not runs_dir.exists():
@@ -740,7 +762,7 @@ def _iter_valid_run_dirs(target_root: Path, target: str) -> List[Path]:
         marker = candidate / RUN_MARKER_FILENAME
         if _run_marker_matches(marker, target):
             valid.append(candidate.resolve())
-    return sorted(valid, key=lambda path: (_run_created_at(path), _run_marker_mtime_ns(path), path.name), reverse=True)
+    return sorted(valid, key=_run_sort_key, reverse=True)
 
 
 def resolve_latest_run_output_dir(output: Path, target: str) -> Path:

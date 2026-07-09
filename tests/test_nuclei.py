@@ -238,6 +238,45 @@ def test_nuclei_baseline_only_skips_when_roi_hosts_are_not_current_targets(tmp_p
     assert "not present" in metadata["skip_reason"]
 
 
+def test_nuclei_baseline_only_skips_when_roi_scope_has_no_hosts(tmp_path, monkeypatch):
+    target = tmp_path / "example.com"
+    alive = target / "probe" / "alive.txt"
+    alive.parent.mkdir(parents=True)
+    alive.write_text("https://www.example.com\n", encoding="utf-8")
+    (target / "intelligence").mkdir()
+    (target / "intelligence" / "template_intelligence.json").write_text('{"selected_tags":[]}', encoding="utf-8")
+    executed = {"value": False}
+
+    monkeypatch.setattr(nuclei, "_nuclei_exists", lambda: True)
+    monkeypatch.setattr(nuclei, "nuclei_template_status", lambda *args, **kwargs: {"ok": True, "path": str(tmp_path)})
+    monkeypatch.setattr(
+        nuclei,
+        "_nuclei_roi_decision",
+        lambda *args, **kwargs: {
+            "run": True,
+            "reason": "strong opportunity evidence",
+            "signals": ["strong_assets"],
+            "roi_hosts": [],
+        },
+    )
+    monkeypatch.setattr(nuclei, "_load_roi_target_hosts", lambda *args, **kwargs: [])
+
+    def fake_run(*args, **kwargs):
+        executed["value"] = True
+        return subprocess.CompletedProcess([], 0, "", "")
+
+    monkeypatch.setattr(nuclei, "_run_nuclei_process", fake_run)
+
+    result = nuclei.run(domain="example.com", output=tmp_path)
+
+    assert result.status == "skipped"
+    assert executed["value"] is False
+    metadata = json.loads((target / "nuclei" / "metadata.json").read_text(encoding="utf-8"))
+    assert metadata["target_scope"]["reason"] == "no ROI opportunity hosts"
+    assert metadata["targets_count"] == 0
+    assert metadata["baseline_scan"]["status"] == "skipped"
+
+
 def test_nuclei_skips_smart_baseline_when_scoped_scan_covers_roi_hosts(tmp_path, monkeypatch):
     target = tmp_path / "example.com"
     alive = target / "probe" / "alive.txt"
