@@ -598,6 +598,20 @@ def test_report_shows_skipped_parameters_from_scan_state(tmp_path: Path) -> None
     assert "redirect_url" not in html
 
 
+def test_report_preserves_legacy_screenshot_timeout_status(tmp_path: Path) -> None:
+    target = tmp_path / "timeout.example"
+    target.mkdir(parents=True)
+    (target / "scan_state.json").write_text(
+        json.dumps({"modules": {"screenshots": {"status": "timed_out", "error": "browser timeout"}}}),
+        encoding="utf-8",
+    )
+
+    report.run("timeout.example", output=tmp_path)
+
+    md = (target / "reports" / "report.md").read_text(encoding="utf-8")
+    assert "- Screenshots: Timed Out (browser timeout)" in md
+
+
 def test_report_shows_template_unavailable_nuclei_as_skipped(tmp_path: Path) -> None:
     target = tmp_path / "example.com"
     target.mkdir(parents=True)

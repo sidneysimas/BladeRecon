@@ -1844,9 +1844,12 @@ def run(target: str, output: Path = Path("results"), scan_duration: Optional[str
         parameters = _load_parameters(target_dir)
         discovered_parameters = _load_discovered_parameters(target_dir)
     screenshots_skipped_reason = ""
+    screenshots_incomplete_reason = ""
     screenshot_state_status = resolve_module_status(screenshot_state, has_artifact=bool(screenshots))
     if screenshot_state_status == "skipped":
         screenshots_skipped_reason = _normalize_skip_reason(str(screenshot_state.get("error") or "Missing Dependency"))
+    elif screenshot_state_status in {"failed", "timeout", "partial"}:
+        screenshots_incomplete_reason = _normalize_skip_reason(str(screenshot_state.get("error") or screenshot_state_status))
     else:
         chromium_ok, chromium_detail = check_playwright_chromium()
         if not screenshots and not chromium_ok:
@@ -1896,7 +1899,11 @@ def run(target: str, output: Path = Path("results"), scan_duration: Optional[str
     screenshots_status = (
         f"Skipped ({screenshots_skipped_reason})"
         if screenshots_skipped_reason
-        else ("Completed" if isinstance(screenshot_state, dict) and screenshot_state.get("status") == "completed" and not screenshots else (len(screenshots) if screenshots_available else "Not Run"))
+        else (
+            f"{_status_label(screenshot_state_status)} ({screenshots_incomplete_reason})"
+            if screenshots_incomplete_reason
+            else ("Completed" if screenshot_state_status == "completed" and not screenshots else (len(screenshots) if screenshots_available else "Not Run"))
+        )
     )
     nuclei_status = (
         f"{nuclei_status_label} ({nuclei_skipped_reason})"
