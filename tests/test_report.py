@@ -134,6 +134,21 @@ def test_research_opportunity_score_caps_historical_only_leads() -> None:
     assert score["level"] == "Medium"
 
 
+def test_report_uses_metadata_status_for_skipped_nuclei_without_scan_state(tmp_path: Path) -> None:
+    target = tmp_path / "example.com"
+    (target / "nuclei").mkdir(parents=True)
+    (target / "nuclei" / "metadata.json").write_text(
+        json.dumps({"status": "skipped", "skip_reason": "templates unavailable"}),
+        encoding="utf-8",
+    )
+
+    report.run("example.com", output=tmp_path)
+
+    md = (target / "reports" / "report.md").read_text(encoding="utf-8")
+    assert "Vulnerabilities (nuclei findings): Skipped (templates unavailable)" in md
+    assert "Vulnerabilities (nuclei findings): Not Run" not in md
+
+
 def test_report_rendering_with_minimal_outputs(tmp_path: Path) -> None:
     target = tmp_path / "example.com"
     (target / "subdomains").mkdir(parents=True)
@@ -623,5 +638,5 @@ def test_report_shows_metadata_only_nuclei_timeout_as_incomplete_coverage(tmp_pa
     assert "Coverage is incomplete" in html
     assert "zero findings should not be interpreted as clean validation" in html
     assert "- Vulnerabilities (nuclei findings): Timed Out" in md
-    assert "- Coverage status: incomplete_timeout" in md
+    assert "- Coverage status: partial" in md
     assert "- Timeout: coverage incomplete after 7s" in md

@@ -202,6 +202,38 @@ def test_scan_state_moves_completed_module_to_failed(tmp_path: Path) -> None:
     assert "nuclei" in state["failed_modules"]
 
 
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("completed", "completed"),
+        ("skipped", "skipped"),
+        ("timeout", "timeout"),
+        ("failed", "failed"),
+        ("partial", "partial"),
+        ("not_run", "not_run"),
+        ("timed_out", "timeout"),
+        ("incomplete_timeout", "partial"),
+    ],
+)
+def test_module_status_resolver_normalizes_canonical_and_legacy_values(value: str, expected: str) -> None:
+    assert utils.resolve_module_status(value) == expected
+
+
+def test_module_status_resolver_prefers_scan_state_then_metadata() -> None:
+    assert utils.resolve_module_status({"status": "failed"}, {"status": "completed"}) == "failed"
+    assert utils.resolve_module_status({}, {"coverage_status": "incomplete_timeout"}) == "partial"
+    assert utils.resolve_module_status({}, {}, has_artifact=True) == "completed"
+    with pytest.raises(ValueError):
+        utils.ModuleResult(status="unexpected")
+
+
+def test_load_scan_state_translates_legacy_module_status_for_resume(tmp_path: Path) -> None:
+    path = tmp_path / "example.com" / "scan_state.json"
+    path.parent.mkdir()
+    path.write_text('{"modules":{"nuclei":{"status":"timed_out"}}}', encoding="utf-8")
+    assert utils.load_scan_state("example.com", tmp_path)["modules"]["nuclei"]["status"] == "timeout"
+
+
 def test_nuclei_template_status_accepts_updater_store(tmp_path: Path) -> None:
     template_dir = tmp_path / "nuclei-templates"
     template_dir.mkdir()
@@ -308,6 +340,19 @@ def test_load_config_supports_nested_env_overrides_with_types(monkeypatch: pytes
     assert config["opsec"]["random_user_agent"] is True
     assert config["nuclei"]["baseline_scan"]["enabled"] is False
     assert config["safety_profiles"]["safe"]["concurrency"]["probe"] == 3
+
+
+def test_safety_profiles_are_monotonic_for_collection_ceilings_and_rates() -> None:
+    config = utils.load_config(Path("missing-config.yaml"))
+    ordered = ["safe", "balanced", "aggressive"]
+    ceilings = ["probe", "js_html", "js_downloads", "screenshots", "nuclei_targets", "historical_urls", "content_discovery", "security_header_hosts", "historical_js"]
+    concurrency = ["probe", "js", "screenshots", "nuclei", "dns"]
+    rates = ["probe", "js", "screenshots", "nuclei"]
+
+    for section, keys in (("request_ceilings", ceilings), ("concurrency", concurrency), ("rate_limits", rates)):
+        for key in keys:
+            values = [config["safety_profiles"][profile][section][key] for profile in ordered]
+            assert values == sorted(values), f"{section}.{key} is not monotonic: {values}"
 
 
 def test_atomic_write_text_preserves_existing_file_on_replace_failure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

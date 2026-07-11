@@ -34,7 +34,7 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 from rich.console import Console
 
 from .. import __version__
-from .utils import REPORT_VERSION, RUN_MARKER_FILENAME, atomic_write_text, check_playwright_chromium, deduplicate_alive_urls, deduplicate_parameters, deduplicate_subdomains, dependency_health, info, normalize_scan_profile, nuclei_template_status, print_module_summary, resolve_latest_run_output_dir, setup_logging, success, target_output_dir, warn
+from .utils import REPORT_VERSION, RUN_MARKER_FILENAME, atomic_write_text, check_playwright_chromium, deduplicate_alive_urls, deduplicate_parameters, deduplicate_subdomains, dependency_health, info, module_status_label, normalize_module_status, normalize_scan_profile, nuclei_template_status, print_module_summary, resolve_latest_run_output_dir, resolve_module_status, setup_logging, success, target_output_dir, warn
 
 console = Console()
 
@@ -827,14 +827,10 @@ def _asset_data_uri(path: Path, max_bytes: int = 2_500_000) -> str:
 
 
 def _status_label(status: str, has_artifact: bool = False, count: int = 0) -> str:
-    value = str(status or "").strip().lower()
+    value = resolve_module_status(status, has_artifact=has_artifact)
     if value == "completed" and count == 0:
         return "Zero Findings" if has_artifact else "Completed"
-    if value == "timed_out":
-        return "Timed Out"
-    if value in {"completed", "failed", "skipped"}:
-        return value.title()
-    return "Not Run"
+    return module_status_label(value)
 
 
 def _estimate_traffic(target_dir: Path) -> Dict[str, int]:
@@ -1702,10 +1698,10 @@ def _render_markdown(context: dict, out_md: Path) -> None:
     metadata = context.get("nuclei_metadata", {})
     if metadata:
         lines.append(f"- Coverage strategy: {metadata.get('coverage_strategy', 'profile/default')}")
-        status = str(metadata.get("status") or metadata.get("coverage_status") or "").lower()
-        coverage_status = str(metadata.get("coverage_status") or ("incomplete_timeout" if status == "timed_out" else "completed" if status == "completed" else "not recorded"))
+        status = resolve_module_status(metadata=metadata)
+        coverage_status = resolve_module_status(metadata.get("coverage_status"), has_artifact=status == "completed")
         lines.append(f"- Coverage status: {coverage_status}")
-        if status == "timed_out" or coverage_status == "incomplete_timeout":
+        if status in {"timeout", "partial"} or coverage_status in {"timeout", "partial"}:
             lines.append(f"- Timeout: coverage incomplete after {metadata.get('timeout_seconds', 'configured timeout')}s")
             if metadata.get("incomplete_reason"):
                 lines.append(f"- Incomplete reason: {metadata.get('incomplete_reason')}")
@@ -1777,8 +1773,8 @@ def run(target: str, output: Path = Path("results"), scan_duration: Optional[str
     secrets = _load_secrets(target_dir)
     screenshots_available = (target_dir / "screenshots").exists()
     nuclei_metadata = _load_nuclei_metadata(target_dir)
-    nuclei_metadata_status = str(nuclei_metadata.get("status") or nuclei_metadata.get("coverage_status") or "").lower()
-    nuclei_metadata_timeout = nuclei_metadata_status == "timed_out" or nuclei_metadata_status == "incomplete_timeout"
+    nuclei_metadata_status = resolve_module_status(metadata=nuclei_metadata)
+    nuclei_metadata_timeout = nuclei_metadata_status in {"timeout", "partial"}
     nuclei_available = (target_dir / "nuclei" / "results.jsonl").exists() or (target_dir / "nuclei" / "results.json").exists()
     nuclei_skipped_reason = "" if nuclei_available or nuclei_metadata_timeout or _nuclei_binary_available() else "Binary not installed"
     nuclei_state_status = "skipped" if nuclei_skipped_reason else ""
@@ -1837,7 +1833,8 @@ def run(target: str, output: Path = Path("results"), scan_duration: Optional[str
     nuclei_state = module_state.get("nuclei", {}) if isinstance(module_state, dict) else {}
     parameter_state = module_state.get("parameters", {}) if isinstance(module_state, dict) else {}
     parameters_skipped_reason = ""
-    if isinstance(parameter_state, dict) and parameter_state.get("status") == "skipped":
+    parameter_state_status = resolve_module_status(parameter_state)
+    if parameter_state_status == "skipped":
         parameters_skipped_reason = _normalize_skip_reason(str(parameter_state.get("error") or "No URLs available for extraction"))
         parameters = []
         discovered_parameters = []
@@ -1847,21 +1844,34 @@ def run(target: str, output: Path = Path("results"), scan_duration: Optional[str
         parameters = _load_parameters(target_dir)
         discovered_parameters = _load_discovered_parameters(target_dir)
     screenshots_skipped_reason = ""
-    if isinstance(screenshot_state, dict) and screenshot_state.get("status") == "skipped":
+    screenshot_state_status = resolve_module_status(screenshot_state, has_artifact=bool(screenshots))
+    if screenshot_state_status == "skipped":
         screenshots_skipped_reason = _normalize_skip_reason(str(screenshot_state.get("error") or "Missing Dependency"))
     else:
         chromium_ok, chromium_detail = check_playwright_chromium()
         if not screenshots and not chromium_ok:
             screenshots_skipped_reason = _normalize_skip_reason(chromium_detail)
-    if isinstance(nuclei_state, dict) and nuclei_state.get("status") in {"skipped", "failed", "timed_out"}:
-        nuclei_state_status = str(nuclei_state.get("status") or "skipped")
+    nuclei_state_status = resolve_module_status(nuclei_state, has_artifact=nuclei_available)
+    if nuclei_state_status not in {"not_run", "completed"}:
         nuclei_status_label = _status_label(nuclei_state_status)
         nuclei_skipped_reason = _normalize_skip_reason(str(nuclei_state.get("error") or "Missing Dependency"))
         if "templates unavailable" in nuclei_skipped_reason.lower():
             nuclei_state_status = "skipped"
             nuclei_status_label = "Skipped"
+    elif nuclei_metadata_status not in {"not_run", "completed"}:
+        nuclei_state_status = nuclei_metadata_status
+        nuclei_status_label = _status_label(nuclei_state_status)
+        nuclei_skipped_reason = _normalize_skip_reason(
+            str(
+                nuclei_metadata.get("skip_reason")
+                or nuclei_metadata.get("reason")
+                or nuclei_metadata.get("incomplete_reason")
+                or nuclei_metadata.get("error")
+                or (f"timeout after {nuclei_metadata.get('timeout_seconds', 'configured timeout')}s" if nuclei_state_status in {"timeout", "partial"} else "Missing Dependency")
+            )
+        )
     elif nuclei_metadata_timeout:
-        nuclei_state_status = "timed_out"
+        nuclei_state_status = nuclei_metadata_status
         nuclei_status_label = "Timed Out"
         nuclei_skipped_reason = _normalize_skip_reason(
             str(
@@ -1948,6 +1958,8 @@ def run(target: str, output: Path = Path("results"), scan_duration: Optional[str
         "nuclei_count": nuclei_count,
         "nuclei_available": nuclei_available,
         "nuclei_skipped_reason": nuclei_skipped_reason,
+        "nuclei_state_status": nuclei_state_status,
+        "nuclei_coverage_status": resolve_module_status(nuclei_metadata.get("coverage_status"), has_artifact=nuclei_state_status == "completed"),
         "nuclei_status_label": nuclei_status_label,
         "nuclei_status": nuclei_status,
         "nuclei_severity_counts": {sev: len(nuclei_grouped.get(sev, [])) for sev in ("critical", "high", "medium", "low", "info", "unknown")},

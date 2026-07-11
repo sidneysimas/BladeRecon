@@ -836,7 +836,7 @@
             <span class="metric-number status-number">{{ nuclei_status_label }}</span>
             <span class="metric-label">Reason: {{ nuclei_skipped_reason }}</span>
           </div>
-          {% if nuclei_metadata.get("status") == "timed_out" or nuclei_metadata.get("coverage_status") == "incomplete_timeout" %}
+          {% if nuclei_state_status in ["timeout", "partial"] %}
           <div class="note" style="margin-top: 12px;">Nuclei timed out after {{ nuclei_metadata.get("timeout_seconds", "the configured timeout") }}s. Coverage is incomplete, so zero findings should not be interpreted as clean validation.</div>
           {% endif %}
           {% else %}
@@ -862,13 +862,13 @@
           </div>
           {% if nuclei_metadata %}
           <div class="grid intel-grid">
-            <div class="intel-item"><span class="intel-value">{{ nuclei_metadata.get("coverage_status", "completed" if nuclei_metadata.get("status") == "completed" else nuclei_metadata.get("status", "Not recorded")) }}</span><span class="intel-label">Coverage Status</span></div>
+            <div class="intel-item"><span class="intel-value">{{ nuclei_coverage_status }}</span><span class="intel-label">Coverage Status</span></div>
             <div class="intel-item"><span class="intel-value">{{ nuclei_metadata.get("templates_executed") if nuclei_metadata.get("templates_executed") is not none else "Not recorded" }}</span><span class="intel-label">Templates Executed</span></div>
             <div class="intel-item"><span class="intel-value">{{ nuclei_metadata.get("templates_skipped") if nuclei_metadata.get("templates_skipped") is not none else ("Preflight disabled" if nuclei_metadata.get("template_count_preflight") is sameas false else "Not recorded") }}</span><span class="intel-label">Templates Skipped</span></div>
             <div class="intel-item"><span class="intel-value">{{ nuclei_metadata.get("duration_seconds", "Not recorded") }}s</span><span class="intel-label">Nuclei Duration</span></div>
             <div class="intel-item"><span class="intel-value">{{ nuclei_metadata.get("findings_count", nuclei_count) }}</span><span class="intel-label">Findings Count</span></div>
           </div>
-          {% if nuclei_metadata.get("status") == "timed_out" or nuclei_metadata.get("coverage_status") == "incomplete_timeout" %}
+          {% if nuclei_state_status in ["timeout", "partial"] %}
           <div class="note" style="margin-top: 12px;">Nuclei timed out after {{ nuclei_metadata.get("timeout_seconds", "the configured timeout") }}s. Coverage is incomplete, so zero findings should not be interpreted as clean validation.</div>
           {% endif %}
           {% if nuclei_metadata.get("baseline_scan") %}

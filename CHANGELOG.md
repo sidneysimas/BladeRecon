@@ -10,6 +10,9 @@
 - Changed full-scan readiness checks so missing optional Nuclei or Chromium
   dependencies warn up front and then skip at module level instead of blocking
   the whole workflow.
+- Fixed Nuclei ROI target selection so high-confidence priority assets and
+  opportunities use the same host contract that justified the ROI decision,
+  preventing "opportunities exist but no ROI hosts" contradictions.
 
 ## 0.2.1 - 2026-06-05
 

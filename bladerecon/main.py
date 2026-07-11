@@ -48,6 +48,7 @@ from .modules.utils import (
     normalize_target,
     PerformanceMonitor,
     nuclei_template_status,
+    module_status_label,
     print_module_header,
     print_module_summary,
     print_scan_summary,
@@ -60,6 +61,7 @@ from .modules.utils import (
     success,
     target_output_dir,
     update_scan_state,
+    resolve_module_status,
     version_info,
     ui_box,
     warn,
@@ -1066,7 +1068,8 @@ def full(
     state["framework_version"] = __version__
     state.setdefault("report_version", "1")
     save_scan_state(domain, workflow_output, state)
-    completed = set(state.get("completed_modules", []))
+    modules_state = state.get("modules", {}) if isinstance(state, dict) else {}
+    completed = {name for name, value in modules_state.items() if resolve_module_status(value) == "completed"} if isinstance(modules_state, dict) else set(state.get("completed_modules", []))
     scan_started = time.perf_counter()
     scan_monitor = PerformanceMonitor().start()
     steps = [
@@ -1110,23 +1113,24 @@ def full(
             step_duration = time.perf_counter() - step_started
             module_durations.append(step_duration)
             module_perf = module_monitor.stop()
-            if getattr(result, "status", "") == "skipped":
+            result_status = resolve_module_status(getattr(result, "status", None))
+            if result_status == "skipped":
                 reason = getattr(result, "reason", "Skipped")
                 update_scan_state(domain, workflow_output, step_name, "skipped", step_duration, reason, performance=module_perf)
                 skip(f"Skipped {step_name} in {step_duration:.2f}s")
                 info(f"Reason: {reason}")
                 log.info("Step skipped: %s in %.2fs (%s)", step_name, step_duration, reason)
                 continue
-            if getattr(result, "status", "") == "failed":
+            if result_status == "failed":
                 reason = getattr(result, "reason", "Failed")
                 update_scan_state(domain, workflow_output, step_name, "failed", step_duration, reason, performance=module_perf)
                 warn(f"Failed {step_name} in {step_duration:.2f}s")
                 info(f"Reason: {reason}")
                 log.warning("Step failed: %s in %.2fs (%s)", step_name, step_duration, reason)
                 continue
-            if getattr(result, "status", "") == "timed_out":
+            if result_status == "timeout":
                 reason = getattr(result, "reason", "Timed out")
-                update_scan_state(domain, workflow_output, step_name, "timed_out", step_duration, reason, performance=module_perf)
+                update_scan_state(domain, workflow_output, step_name, "timeout", step_duration, reason, performance=module_perf)
                 warn(f"Timed out {step_name} in {step_duration:.2f}s")
                 info(f"Reason: {reason}")
                 log.warning("Step timed out: %s in %.2fs (%s)", step_name, step_duration, reason)
@@ -1396,6 +1400,29 @@ def _count_lines(path: Path) -> int:
     return len([line for line in path.read_text(encoding="utf-8-sig").splitlines() if line.strip()])
 
 
+def _load_module_metadata_status(target_dir: Path, module_name: str) -> Tuple[Optional[str], str]:
+    metadata_path = target_dir / module_name / "metadata.json"
+    if not metadata_path.exists():
+        return None, ""
+    try:
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8-sig"))
+    except Exception:
+        return None, ""
+    if not isinstance(metadata, dict):
+        return None, ""
+    status = resolve_module_status(metadata)
+    if status != "not_run":
+        reason = str(
+            metadata.get("skip_reason")
+            or metadata.get("reason")
+            or metadata.get("incomplete_reason")
+            or metadata.get("error")
+            or ""
+        ).strip()
+        return status, reason
+    return None, ""
+
+
 def _collect_summary(domain: str, output: Path, duration: str) -> dict:
     target_dir = target_output_dir(output, domain)
     scan_state_path = target_dir / "scan_state.json"
@@ -1428,13 +1455,18 @@ def _collect_summary(domain: str, output: Path, duration: str) -> dict:
     screenshot_count = len(list((target_dir / "screenshots").glob("*.png"))) if (target_dir / "screenshots").exists() else 0
     screenshot_state = modules.get("screenshots", {}) if isinstance(modules, dict) else {}
     nuclei_state = modules.get("nuclei", {}) if isinstance(modules, dict) else {}
-    screenshot_status = "Skipped" if isinstance(screenshot_state, dict) and screenshot_state.get("status") == "skipped" else screenshot_count
-    if isinstance(screenshot_state, dict) and screenshot_state.get("status") == "failed" and not screenshot_count:
+    screenshot_state_status = resolve_module_status(screenshot_state, has_artifact=bool(screenshot_count))
+    screenshot_status = module_status_label(screenshot_state_status) if screenshot_state_status != "completed" else screenshot_count
+    if screenshot_state_status == "failed" and not screenshot_count:
         screenshot_status = "Failed"
-    if isinstance(nuclei_state, dict) and nuclei_state.get("status") in {"skipped", "failed", "timed_out"}:
-        nuclei_status = str(nuclei_state.get("status") or "skipped").title()
+    metadata_status, metadata_reason = _load_module_metadata_status(target_dir, "nuclei")
+    nuclei_state_status = resolve_module_status(nuclei_state)
+    if nuclei_state_status not in {"not_run", "completed"}:
+        nuclei_status = module_status_label(nuclei_state_status)
         if "templates unavailable" in str(nuclei_state.get("error") or "").lower():
             nuclei_status = "Skipped"
+    elif metadata_status not in {"not_run", "completed"}:
+        nuclei_status = module_status_label(metadata_status)
     elif not nuclei_path.exists():
         nuclei_status = "Not Run"
     else:

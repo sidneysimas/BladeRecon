@@ -384,12 +384,23 @@ on future scans.
 
 ## Roadmap
 
-- Keep the CLI lightweight and Windows-friendly
-- Improve report intelligence without changing output formats unnecessarily
-- Keep README and social media assets current for release candidates
-- Expand test coverage for real-world edge cases
-- Keep optional dependencies graceful and transparent
-- Prepare `v0.2.1` for public Release Candidate evaluation
+### Current Release Candidate (v0.2.1)
+
+- Finalize release consistency across CLI, reports, metadata, and scan state
+- Validate real-world scans across Safe, Balanced, and Aggressive profiles
+- Continue improving detection quality while keeping runtime efficient
+- Expand regression coverage using real production-inspired scenarios
+- Keep optional dependencies graceful, transparent, and well documented
+- Gather community feedback before the first stable release
+
+### Future Development (v0.3.0)
+
+- Improve Opportunity Intelligence and evidence correlation
+- Smarter target prioritization based on recon confidence
+- Additional report intelligence without increasing noise
+- Performance optimizations for very large scopes
+- Better observability, diagnostics, and debugging information
+- Continued UX improvements for researchers and bug bounty hunters
 
 ## Documentation
 

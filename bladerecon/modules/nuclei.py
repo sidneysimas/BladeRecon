@@ -26,6 +26,15 @@ from .utils import ModuleResult, atomic_write_text, config_get, deduplicate_aliv
 
 SEVERITY_ORDER = ("critical", "high", "medium", "low", "info", "unknown")
 BROAD_INFRA_TAGS = {"apache", "nginx"}
+CONFIDENCE_RANK = {"low": 1, "medium": 2, "high": 3, "very high": 4}
+
+
+def _confidence_at_least(value: object, minimum: str) -> bool:
+    return CONFIDENCE_RANK.get(str(value or "").strip().lower(), 0) >= CONFIDENCE_RANK[minimum]
+
+
+def _contract_warn(path: Path, message: str) -> None:
+    warn(f"Invalid Nuclei input contract: {path} ({message})")
 
 
 def _nuclei_exists() -> bool:
@@ -140,22 +149,33 @@ def _dedupe_jsonl_text(json_text: str) -> str:
 
 
 def _load_detected_technologies(output: Path, target_name: str) -> List[str]:
-    path = target_output_dir(output, target_name) / "technologies" / "technologies.json"
+    target_dir = target_output_dir(output, target_name)
+    path = target_dir / "technology" / "technology.json"
+    legacy_path = target_dir / "technologies" / "technologies.json"
+    if not path.exists() and legacy_path.exists():
+        path = legacy_path
     if not path.exists():
         return []
     try:
         data = json.loads(path.read_text(encoding="utf-8-sig"))
-    except Exception:
+    except Exception as exc:
+        _contract_warn(path, f"invalid JSON: {exc}")
         return []
     detected = set()
     if isinstance(data, list):
         for row in data:
             if not isinstance(row, dict):
                 continue
-            for item in row.get("detected", []) or []:
+            detected_values = row.get("detected", [])
+            for item in detected_values if isinstance(detected_values, list) else []:
                 value = str(item).strip()
                 if value:
                     detected.add(value)
+            name = str(row.get("name") or "").strip()
+            if name:
+                detected.add(name)
+    else:
+        _contract_warn(path, "expected a list of technology records")
     return sorted(detected)
 
 
@@ -165,8 +185,12 @@ def _load_template_intelligence(output: Path, target_name: str) -> Dict[str, obj
         return {}
     try:
         data = json.loads(path.read_text(encoding="utf-8-sig"))
-        return data if isinstance(data, dict) else {}
-    except Exception:
+        if isinstance(data, dict):
+            return data
+        _contract_warn(path, "expected an object")
+        return {}
+    except Exception as exc:
+        _contract_warn(path, f"invalid JSON: {exc}")
         return {}
 
 
@@ -175,8 +199,21 @@ def _read_json_file(path: Path, default: object) -> object:
         return default
     try:
         return json.loads(path.read_text(encoding="utf-8-sig"))
-    except Exception:
+    except Exception as exc:
+        _contract_warn(path, f"invalid JSON: {exc}")
         return default
+
+
+def _record_host(value: object) -> str:
+    return _opportunity_host(value)
+
+
+def _opportunity_record_host(item: Dict[str, object]) -> str:
+    for key in ("target", "host", "asset", "url"):
+        host = _record_host(item.get(key))
+        if host:
+            return host
+    return ""
 
 
 def _nuclei_roi_decision(output: Path, target_name: str, baseline_only: bool, selected_tags: List[str], explicit_templates: bool, automatic_scan: bool) -> Dict[str, object]:
@@ -220,11 +257,10 @@ def _nuclei_roi_decision(output: Path, target_name: str, baseline_only: bool, se
         for item in opportunities:
             if not isinstance(item, dict):
                 continue
-            confidence = str(item.get("confidence") or "").lower()
             score = to_int(item.get("score"))
             validation_strength = str(item.get("validation_strength") or "").lower()
             positive = item.get("positive_validation_signals")
-            if confidence == "high" and score >= 70:
+            if _confidence_at_least(item.get("confidence"), "high") and score >= 70:
                 high_confidence.append(item)
             strong_positive = False
             if isinstance(positive, list):
@@ -246,7 +282,7 @@ def _nuclei_roi_decision(output: Path, target_name: str, baseline_only: bool, se
     top_assets = asset_priority.get("top_assets", []) if isinstance(asset_priority, dict) else []
     strong_assets = [
         item for item in top_assets
-        if isinstance(item, dict) and to_int(item.get("score")) >= 70 and str(item.get("confidence") or "").lower() == "high"
+        if isinstance(item, dict) and _opportunity_record_host(item) and to_int(item.get("score")) >= 70 and _confidence_at_least(item.get("confidence"), "high")
     ]
 
     if high_confidence or validated or strong_assets:
@@ -275,6 +311,31 @@ def _write_nuclei_skip_artifacts(out_dir: Path, metadata: Dict[str, object]) -> 
         encoding="utf-8",
     )
     write_json(out_dir / "metadata.json", metadata)
+
+
+def _write_basic_skip_artifacts(
+    out_dir: Path,
+    target_name: str,
+    started: float,
+    reason: str,
+    profile: str = "",
+    command: Optional[List[str]] = None,
+    **extra: object,
+) -> None:
+    metadata: Dict[str, object] = {
+        "profile": profile,
+        "status": "skipped",
+        "skip_reason": reason,
+        "coverage_strategy": "skipped_runtime_preflight",
+        "coverage_status": "skipped",
+        "targets": target_name,
+        "targets_count": 0,
+        "findings_count": 0,
+        "duration_seconds": round(time.perf_counter() - started, 2),
+        "command": command or [],
+    }
+    metadata.update(extra)
+    _write_nuclei_skip_artifacts(out_dir, metadata)
 
 
 def _write_nuclei_timeout_artifacts(out_dir: Path, metadata: Dict[str, object]) -> None:
@@ -450,17 +511,16 @@ def _load_roi_target_hosts(output: Path, target_name: str, max_hosts: int = 10) 
     for item in opportunities:
         if not isinstance(item, dict):
             continue
-        host = _opportunity_host(item.get("target"))
+        host = _opportunity_record_host(item)
         if not host or host in seen:
             continue
         score = to_int(item.get("score"))
-        confidence = str(item.get("confidence") or "").lower()
         strength = str(item.get("validation_strength") or "").lower()
         opportunity_type = str(item.get("opportunity_type") or "").lower()
         historical_only = opportunity_type == "historical" and strength not in {"moderate", "strong"}
         if historical_only:
             continue
-        if strength in {"moderate", "strong"} or (confidence == "high" and score >= 70):
+        if strength in {"moderate", "strong"} or (_confidence_at_least(item.get("confidence"), "high") and score >= 70):
             ranked.append((score, strength_rank.get(strength, 0), host))
             seen.add(host)
 
@@ -470,12 +530,11 @@ def _load_roi_target_hosts(output: Path, target_name: str, max_hosts: int = 10) 
     for item in top_assets if isinstance(top_assets, list) else []:
         if not isinstance(item, dict):
             continue
-        host = _opportunity_host(item.get("host") or item.get("url") or item.get("target"))
+        host = _opportunity_record_host(item)
         if not host or host in seen:
             continue
         score = to_int(item.get("score"))
-        confidence = str(item.get("confidence") or "").lower()
-        if score >= 70 and confidence == "high":
+        if score >= 70 and _confidence_at_least(item.get("confidence"), "high"):
             ranked.append((score, 1, host))
             seen.add(host)
 
@@ -915,6 +974,14 @@ def run(
     if not _nuclei_exists():
         log.warning("nuclei binary not found")
         result = skipped_result("Binary not installed")
+        _write_basic_skip_artifacts(
+            out_dir,
+            target_name,
+            started,
+            result.reason,
+            profile=profile,
+            coverage_strategy="skipped_missing_binary",
+        )
         skip("Nuclei module skipped")
         info("Reason: nuclei binary not found in PATH")
         print_module_summary(
@@ -931,6 +998,15 @@ def run(
     cmd: List[str] = ["nuclei"]
     if target_list:
         if not target_list.exists() or not target_list.read_text(encoding="utf-8-sig").strip():
+            _write_basic_skip_artifacts(
+                out_dir,
+                target_name,
+                started,
+                "No alive targets",
+                profile=profile,
+                command=cmd,
+                coverage_strategy="skipped_empty_targets",
+            )
             skip("Nuclei module skipped")
             info("Reason: no alive targets")
             log.warning("No nuclei targets found")
@@ -1016,6 +1092,24 @@ def run(
     template_status = nuclei_template_status(templates or default_template_dir, require_checksum=not explicit_templates)
     if not template_status["ok"]:
         reason = f"templates unavailable at {template_status['path']}. Run: nuclei -ut"
+        _write_basic_skip_artifacts(
+            out_dir,
+            target_name,
+            started,
+            reason,
+            profile=profile,
+            command=cmd,
+            severity=resolved_severity,
+            exclude_tags=resolved_exclude_tags,
+            automatic_scan=automatic_scan,
+            baseline_only=baseline_only,
+            detected_technologies=detected_technologies,
+            template_intelligence=template_intelligence,
+            selected_tags_requested=selected_tags_requested,
+            selected_tags=selected_tags,
+            selection_reason=selection_reason,
+            coverage_strategy="skipped_templates_unavailable",
+        )
         warn("Nuclei templates are not installed.")
         info("Run: nuclei -ut")
         print_module_summary(

@@ -29,6 +29,20 @@ def test_collect_summary_marks_absent_nuclei_as_not_run(tmp_path):
     assert summary["Nuclei Findings"] == "Not Run"
 
 
+def test_collect_summary_uses_metadata_for_skipped_nuclei(tmp_path):
+    target = tmp_path / "example.com"
+    target.mkdir(parents=True)
+    (target / "nuclei").mkdir(parents=True)
+    (target / "nuclei" / "metadata.json").write_text(
+        json.dumps({"status": "skipped", "skip_reason": "templates unavailable"}),
+        encoding="utf-8",
+    )
+
+    summary = _collect_summary("example.com", tmp_path, "1.00s")
+
+    assert summary["Nuclei Findings"] == "Skipped"
+
+
 def test_resume_preserves_latest_run_profile(tmp_path, monkeypatch):
     run_dir = create_scan_run_output_dir(tmp_path, "example.com", "safe")
     (run_dir / "scan_state.json").write_text('{"scan_profile":"safe","completed_modules":[]}', encoding="utf-8")

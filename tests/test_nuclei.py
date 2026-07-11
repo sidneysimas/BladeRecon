@@ -69,6 +69,17 @@ def test_nuclei_loads_detected_technologies(tmp_path):
     assert nuclei._load_detected_technologies(tmp_path, "example.com") == ["Apache", "PHP"]
 
 
+def test_nuclei_loads_canonical_technology_contract(tmp_path):
+    tech_path = tmp_path / "example.com" / "technology" / "technology.json"
+    tech_path.parent.mkdir(parents=True)
+    tech_path.write_text(
+        json.dumps([{"name": "Nginx", "hosts": ["www.example.com"], "confidence": "High"}]),
+        encoding="utf-8",
+    )
+
+    assert nuclei._load_detected_technologies(tmp_path, "example.com") == ["Nginx"]
+
+
 def test_nuclei_detects_tag_filter_template_miss():
     stderr = "could not find any templates with tech tag: drupal,java,nextjs"
 
@@ -277,6 +288,53 @@ def test_nuclei_baseline_only_skips_when_roi_scope_has_no_hosts(tmp_path, monkey
     assert metadata["baseline_scan"]["status"] == "skipped"
 
 
+def test_shopify_regression_priority_assets_produce_roi_hosts(tmp_path, monkeypatch):
+    target = tmp_path / "shopify.com"
+    alive = target / "probe" / "alive.txt"
+    alive.parent.mkdir(parents=True)
+    alive.write_text("https://accounts.shopify.com\n", encoding="utf-8")
+    (target / "intelligence").mkdir()
+    (target / "intelligence" / "template_intelligence.json").write_text('{"selected_tags":[]}', encoding="utf-8")
+    (target / "intelligence" / "opportunity_priorities.json").write_text("[]", encoding="utf-8")
+    (target / "asset_priority.json").write_text(
+        json.dumps(
+            {
+                "asset_count": 1,
+                "top_assets": [
+                    {
+                        "asset": "accounts.shopify.com",
+                        "score": 91,
+                        "confidence": "High",
+                        "reasons": ["Alive HTTP service", "Interesting content discovery path"],
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    captured = {}
+
+    monkeypatch.setattr(nuclei, "_nuclei_exists", lambda: True)
+    monkeypatch.setattr(nuclei, "nuclei_template_status", lambda *args, **kwargs: {"ok": True, "path": str(tmp_path)})
+
+    def fake_run(cmd, timeout, out_dir, template_total, target_count, enforce_timeout=False, progress_interval=10):
+        captured["cmd"] = cmd
+        captured["target_count"] = target_count
+        return subprocess.CompletedProcess(cmd, 0, "", "[INF] Templates loaded for current scan: 12")
+
+    monkeypatch.setattr(nuclei, "_run_nuclei_process", fake_run)
+
+    result = nuclei.run(domain="shopify.com", output=tmp_path)
+
+    assert result.status == "completed"
+    assert captured["target_count"] == 1
+    metadata = json.loads((target / "nuclei" / "metadata.json").read_text(encoding="utf-8"))
+    assert metadata["roi_decision"]["run"] is True
+    assert metadata["roi_decision"]["strong_assets"] == 1
+    assert metadata["target_scope"]["reason"] == "ROI scope did not reduce target set"
+    assert metadata["coverage_strategy"] == "baseline_only"
+
+
 def test_nuclei_skips_smart_baseline_when_scoped_scan_covers_roi_hosts(tmp_path, monkeypatch):
     target = tmp_path / "example.com"
     alive = target / "probe" / "alive.txt"
@@ -379,6 +437,25 @@ def test_nuclei_skips_baseline_only_without_opportunity_evidence(tmp_path, monke
     assert (target / "nuclei" / "results.json").read_text(encoding="utf-8").strip() == "[]"
 
 
+def test_nuclei_template_skip_writes_metadata_and_results(tmp_path, monkeypatch):
+    target = tmp_path / "example.com"
+    alive = target / "probe" / "alive.txt"
+    alive.parent.mkdir(parents=True)
+    alive.write_text("https://www.example.com\n", encoding="utf-8")
+
+    monkeypatch.setattr(nuclei, "_nuclei_exists", lambda: True)
+    monkeypatch.setattr(nuclei, "nuclei_template_status", lambda *args, **kwargs: {"ok": False, "path": str(tmp_path), "missing": ["templates"]})
+
+    result = nuclei.run(domain="example.com", output=tmp_path)
+
+    assert result.status == "skipped"
+    metadata = json.loads((target / "nuclei" / "metadata.json").read_text(encoding="utf-8"))
+    assert metadata["status"] == "skipped"
+    assert metadata["coverage_strategy"] == "skipped_templates_unavailable"
+    assert "templates unavailable" in metadata["skip_reason"]
+    assert json.loads((target / "nuclei" / "results.json").read_text(encoding="utf-8")) == []
+
+
 def test_nuclei_tag_miss_fallback_respects_roi_gate(tmp_path, monkeypatch):
     target = tmp_path / "example.com"
     alive = target / "probe" / "alive.txt"
@@ -436,6 +513,27 @@ def test_nuclei_roi_requires_high_confidence_not_score_only(tmp_path):
     )
 
     assert decision["run"] is False
+
+
+def test_nuclei_roi_accepts_very_high_confidence_opportunity(tmp_path):
+    target = tmp_path / "example.com" / "intelligence"
+    target.mkdir(parents=True)
+    (target / "opportunity_priorities.json").write_text(
+        json.dumps([{"target": "https://api.example.com", "score": 95, "confidence": "Very High"}]),
+        encoding="utf-8",
+    )
+
+    decision = nuclei._nuclei_roi_decision(
+        tmp_path,
+        "example.com",
+        baseline_only=True,
+        selected_tags=[],
+        explicit_templates=False,
+        automatic_scan=False,
+    )
+
+    assert decision["run"] is True
+    assert decision["high_confidence_opportunities"] == 1
 
 
 def test_nuclei_roi_skips_broad_infra_tags_without_opportunity_evidence(tmp_path):

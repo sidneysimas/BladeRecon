@@ -972,6 +972,57 @@ class ModuleResult:
     status: str = "completed"
     reason: str = ""
 
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "status", normalize_module_status(self.status, strict=True))
+
+
+# Module status is owned here. Producers emit canonical values; scan_state is
+# the persisted authority. Metadata and old artifacts are inputs only.
+MODULE_STATUSES = frozenset({"completed", "skipped", "timeout", "failed", "partial", "not_run"})
+_LEGACY_MODULE_STATUSES = {
+    "timed_out": "timeout",
+    "incomplete_timeout": "partial",
+    "incomplete": "partial",
+    "not run": "not_run",
+    "not-run": "not_run",
+    "": "not_run",
+}
+
+
+def normalize_module_status(value: Any, *, strict: bool = False) -> str:
+    """Return the canonical module status, translating persisted legacy values.
+
+    ``strict`` is for new producers and rejects unknown values. Readers use the
+    default so malformed legacy artifacts safely render as ``not_run``.
+    """
+    raw = str(value or "").strip().lower().replace("-", "_").replace(" ", "_")
+    status_value = _LEGACY_MODULE_STATUSES.get(raw, raw)
+    if status_value in MODULE_STATUSES:
+        return status_value
+    if strict:
+        raise ValueError(f"unknown module status: {value!r}")
+    return "not_run"
+
+
+def resolve_module_status(scan_state: Any = None, metadata: Any = None, *, has_artifact: bool = False) -> str:
+    """Resolve one canonical status from authoritative state then legacy metadata."""
+    for source in (scan_state, metadata):
+        if isinstance(source, dict):
+            raw = source.get("status") or source.get("coverage_status")
+        else:
+            raw = source
+        if raw is not None:
+            resolved = normalize_module_status(raw)
+            if resolved != "not_run" or str(raw or "").strip().lower() in {"not_run", "not run", "not-run"}:
+                return resolved
+    return "completed" if has_artifact else "not_run"
+
+
+def module_status_label(status_value: Any) -> str:
+    return {"timeout": "Timed Out", "not_run": "Not Run"}.get(
+        normalize_module_status(status_value), normalize_module_status(status_value).title()
+    )
+
 
 def skipped_result(reason: str) -> ModuleResult:
     return ModuleResult(status="skipped", reason=reason)
@@ -1586,7 +1637,15 @@ def load_scan_state(domain: str, output: Path) -> dict:
     path = scan_state_path(domain, output)
     if path.exists():
         try:
-            return json.loads(path.read_text(encoding="utf-8"))
+            state = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(state, dict):
+                modules = state.get("modules", {})
+                if isinstance(modules, dict):
+                    for entry in modules.values():
+                        if isinstance(entry, dict):
+                            entry["status"] = resolve_module_status(entry)
+                return state
+            return {}
         except Exception:
             return {}
     return {}
@@ -1623,6 +1682,7 @@ def save_scan_state(domain: str, output: Path, state: dict) -> None:
 
 
 def update_scan_state(domain: str, output: Path, module: str, status_value: str, duration: float, error_text: str = "", performance: Optional[Dict[str, Any]] = None) -> None:
+    status_value = normalize_module_status(status_value, strict=True)
     state = load_scan_state(domain, output)
     modules = state.setdefault("modules", {})
     modules[module] = {
@@ -1643,7 +1703,7 @@ def update_scan_state(domain: str, output: Path, module: str, status_value: str,
             failed.remove(module)
         if module in skipped:
             skipped.remove(module)
-    elif status_value in {"failed", "timed_out"}:
+    elif status_value in {"failed", "timeout", "partial"}:
         if module not in failed:
             failed.append(module)
         if module in skipped:
