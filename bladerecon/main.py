@@ -692,6 +692,20 @@ def _ensure_readiness(requirements: List[str], output: Path, template_dir: Optio
     return True
 
 
+def _warn_optional_readiness(requirements: List[str], output: Path, template_dir: Optional[Path] = None) -> None:
+    """Warn about optional dependencies without blocking a full workflow."""
+    failures = readiness_failures(requirements, output=output, template_dir=template_dir)
+    if not failures:
+        return
+    warn("Optional dependencies are missing; related modules may be skipped.")
+    for failure in failures:
+        detail = f"{failure.name}: {failure.status} - {failure.reason}"
+        if failure.details:
+            detail += f" ({failure.details})"
+        info(detail)
+    info("Run `bladerecon doctor` or `bladerecon repair` for dependency details.")
+
+
 def _custom_templates_available(path: Optional[Path]) -> bool:
     if not path or not path.exists():
         return False
@@ -1021,11 +1035,12 @@ def full(
         active_profile = resolve_scan_run_profile(output, domain)
     info(f"Target acquired: {domain}")
     info(f"Safety profile: {active_profile}")
-    requirements = ["Playwright", "Chromium", "Output Directories", "Permissions"]
-    if all:
-        requirements.extend(["Nuclei Binary", "Nuclei Templates"])
-    if not _ensure_readiness(requirements, output):
+    if not _ensure_readiness(["Output Directories", "Permissions"], output):
         raise typer.Exit(1)
+    optional_requirements = ["Playwright", "Chromium"]
+    if all:
+        optional_requirements.extend(["Nuclei Binary", "Nuclei Templates"])
+    _warn_optional_readiness(optional_requirements, output)
 
     from .modules import nuclei as nmod  # type: ignore
     from .modules import advanced as advmod  # type: ignore

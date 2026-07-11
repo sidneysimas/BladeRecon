@@ -1,8 +1,10 @@
 blank_issues_enabled: false
+
 contact_links:
-  - name: Security vulnerability in BladeRecon
+  - name: Report a security vulnerability
     url: https://github.com/mohamedxk9tb/BladeRecon/blob/main/SECURITY.md
-    about: Use the security policy for sensitive vulnerabilities in BladeRecon itself.
-  - name: Support guidance
+    about: Please do not open a public issue for security vulnerabilities. Follow our security policy instead.
+
+  - name: Get help and support
     url: https://github.com/mohamedxk9tb/BladeRecon/blob/main/SUPPORT.md
-    about: Read support expectations before sharing logs, reports, or artifacts.
+    about: Read the support guide before opening an issue or requesting help.

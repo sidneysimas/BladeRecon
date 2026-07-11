@@ -2,7 +2,7 @@ import json
 import subprocess
 from types import SimpleNamespace
 
-from bladerecon.main import _bootstrap_nuclei_templates, _collect_summary, _collect_traffic_counts, _command_output, _custom_templates_available, resume
+from bladerecon.main import _bootstrap_nuclei_templates, _collect_summary, _collect_traffic_counts, _command_output, _custom_templates_available, full, resume
 from bladerecon.modules import nuclei
 from bladerecon.modules.utils import create_scan_run_output_dir
 
@@ -43,6 +43,43 @@ def test_resume_preserves_latest_run_profile(tmp_path, monkeypatch):
 
     assert calls[0]["resume_mode"] is True
     assert calls[0]["profile"] == "safe"
+
+
+def test_full_preflight_does_not_block_on_optional_dependencies(tmp_path, monkeypatch):
+    readiness_calls = []
+    optional_calls = []
+
+    def fake_ensure(requirements, output, template_dir=None, auto_templates=True):
+        readiness_calls.append(list(requirements))
+        return True
+
+    def fake_warn(requirements, output, template_dir=None):
+        optional_calls.append(list(requirements))
+
+    monkeypatch.setattr("bladerecon.main._ensure_readiness", fake_ensure)
+    monkeypatch.setattr("bladerecon.main._warn_optional_readiness", fake_warn)
+    monkeypatch.setattr("bladerecon.main.print_module_header", lambda *args, **kwargs: None)
+    monkeypatch.setattr("bladerecon.main.print_scan_summary", lambda *args, **kwargs: None)
+    monkeypatch.setattr("bladerecon.main.success", lambda *args, **kwargs: None)
+    monkeypatch.setattr("bladerecon.main.info", lambda *args, **kwargs: None)
+
+    result = SimpleNamespace(status="completed")
+    monkeypatch.setattr("bladerecon.modules.subdomains.run", lambda *args, **kwargs: result)
+    monkeypatch.setattr("bladerecon.modules.probe.run", lambda *args, **kwargs: result)
+    monkeypatch.setattr("bladerecon.modules.js.run", lambda *args, **kwargs: result)
+    monkeypatch.setattr("bladerecon.modules.endpoints.run", lambda *args, **kwargs: result)
+    monkeypatch.setattr("bladerecon.modules.secrets.run", lambda *args, **kwargs: result)
+    monkeypatch.setattr("bladerecon.modules.parameters.run", lambda *args, **kwargs: result)
+    monkeypatch.setattr("bladerecon.modules.intelligence.run", lambda *args, **kwargs: result)
+    monkeypatch.setattr("bladerecon.modules.advanced.run", lambda *args, **kwargs: result)
+    monkeypatch.setattr("bladerecon.modules.screenshots.run", lambda *args, **kwargs: result)
+    monkeypatch.setattr("bladerecon.modules.nuclei.run", lambda *args, **kwargs: result)
+    monkeypatch.setattr("bladerecon.modules.report.run", lambda *args, **kwargs: result)
+
+    full(domain="example.com", output=tmp_path, report=False)
+
+    assert readiness_calls == [["Output Directories", "Permissions"]]
+    assert optional_calls == [["Playwright", "Chromium", "Nuclei Binary", "Nuclei Templates"]]
 
 
 def test_collect_traffic_counts_includes_module_metadata(tmp_path):

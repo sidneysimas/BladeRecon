@@ -7,6 +7,9 @@
   behavior in user-facing documentation.
 - Improved issue templates so maintainers receive sanitized reproduction data,
   environment details, and validation context.
+- Changed full-scan readiness checks so missing optional Nuclei or Chromium
+  dependencies warn up front and then skip at module level instead of blocking
+  the whole workflow.
 
 ## 0.2.1 - 2026-06-05
 

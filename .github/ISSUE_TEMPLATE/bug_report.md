@@ -1,65 +1,191 @@
 ---
 name: Bug Report
-about: Report a BladeRecon defect or regression
+about: Report a bug, regression, or unexpected behavior in BladeRecon
 title: "[Bug]: "
-labels: bug
+labels:
+  - bug
 assignees: ""
 ---
 
-## BladeRecon Version
+# Bug Summary
 
-<!-- Paste `bladerecon --version` output or package version. -->
+Provide a short description of the problem.
 
-## Environment
+---
 
-- OS:
-- Python version:
+# BladeRecon Information
+
+- BladeRecon version:
 - Install method:
-- BladeRecon profile:
-- Nuclei installed:
-- Playwright Chromium installed:
+  - [ ] pip
+  - [ ] pipx
+  - [ ] Source
+- Python version:
+- Operating System:
+- Architecture (x64 / ARM64):
+- Shell (PowerShell, Bash, Zsh, etc.):
 
-## Command Executed
+---
+
+# Scan Information
+
+- Target:
+- Scan type:
+  - [ ] Full
+  - [ ] Resume
+  - [ ] Report
+  - [ ] Single Module
+
+- Profile:
+  - [ ] Safe
+  - [ ] Balanced
+  - [ ] Aggressive
+
+---
+
+# Optional Components
+
+- Nuclei installed:
+- Nuclei version:
+- Playwright Chromium installed:
+- Playwright version:
+
+---
+
+# Command Executed
 
 ```bash
 
 ```
 
-## Reproduction Steps
+---
+
+# Steps To Reproduce
 
 1.
 2.
 3.
 
-## Expected Behavior
+---
 
+# Expected Behavior
 
-## Actual Behavior
+Describe what should have happened.
 
+---
 
-## Run State
+# Actual Behavior
 
-<!-- If available, summarize latest_run.json and scan_state.json. -->
+Describe what actually happened.
+
+---
+
+# Does this affect scan accuracy?
+
+- [ ] Yes
+- [ ] No
+- [ ] Not sure
+
+---
+
+# Severity
+
+- [ ] Critical
+- [ ] High
+- [ ] Medium
+- [ ] Low
+
+---
+
+# Regression
+
+- [ ] This worked in a previous BladeRecon version.
+
+Previous version (if known):
+
+---
+
+# Bug Category
+
+- [ ] CLI
+- [ ] Runtime
+- [ ] Detection
+- [ ] Intelligence
+- [ ] Report
+- [ ] Resume
+- [ ] Nuclei
+- [ ] Screenshots
+- [ ] Packaging
+- [ ] Documentation
+- [ ] Other
+
+---
+
+# Run Information
+
+If available, include:
 
 - Output path:
 - Run ID:
-- Failed, skipped, or timed out module:
+- Module that failed:
+- Module that timed out:
+- Module that was skipped:
 
-## Logs
+---
 
-<!-- Paste relevant terminal output or sanitized log excerpts. -->
+# Logs
+
+Paste relevant terminal output.
 
 ```text
 
 ```
 
-## Artifacts
+---
 
-<!-- Attach or summarize relevant sanitized files, such as scan_state.json, latest_run.json, report.md, module metadata, or screenshots. Do not include third-party secrets or unauthorized target data. -->
+# Recommended Attachments
 
-## Data Safety
+If possible, attach sanitized copies of:
 
-- [ ] I removed secrets, tokens, customer data, and unauthorized third-party target data.
-- [ ] I can reproduce this with a permitted target or sanitized fixture.
+- latest_run.json
+- scan_state.json
+- scan_meta.json
+- report.md
+- report.html (optional)
+- module metadata.json
+- screenshots (if relevant)
 
-## Additional Context
+---
+
+# Validation Performed
+
+If applicable:
+
+- [ ] python -m pytest
+- [ ] python -m compileall bladerecon
+- [ ] python -m build
+
+---
+
+# Data Safety Checklist
+
+Before submitting:
+
+- [ ] I removed secrets, API keys, tokens, cookies, and credentials.
+- [ ] I removed customer or third-party confidential data.
+- [ ] I only included data from targets I am authorized to scan.
+- [ ] Attached logs and reports have been sanitized.
+
+---
+
+# Additional Context
+
+Add anything else that may help reproduce or understand the issue.
+
+Examples:
+
+- Screenshots
+- Network conditions
+- Proxy/VPN
+- Special configuration
+- Related issue numbers
